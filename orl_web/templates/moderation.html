@@ -1,0 +1,64 @@
+{% extends "base.html" %}
+{% block title %}Review console — TruthLM{% endblock %}
+{% block body_class %}moderation-page{% endblock %}
+{% block content %}
+<header class="page-header moderation-header">
+  <div class="section-inner">
+    <p class="eyebrow light">Restricted review workspace</p>
+    <h1>Every question is read by a person first.</h1>
+    <p>Approve questions that deserve an investigation. Decline the rest with a reason, and the member will see it. Every decision is recorded in the audit trail with your identity.</p>
+  </div>
+</header>
+<section class="moderation-band">
+  <div class="section-inner">
+    {% if authorized %}
+    <nav class="console-tabs" aria-label="Review sections" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="questions-panel" id="questions-tab" data-tab="questions-panel">Questions <span id="pending-count" class="tab-count"></span></button>
+      <button role="tab" aria-selected="false" aria-controls="flags-panel" id="flags-tab" data-tab="flags-panel">Flags <span id="flag-count" class="tab-count"></span></button>
+      {% if is_admin %}
+      <button role="tab" aria-selected="false" aria-controls="members-panel" id="members-tab" data-tab="members-panel">Invitations <span id="access-count" class="tab-count"></span></button>
+      <button role="tab" aria-selected="false" aria-controls="cycle-panel" id="cycle-tab" data-tab="cycle-panel">Weekly cycle</button>
+      {% endif %}
+    </nav>
+    <p id="console-status" class="console-status" role="status">Loading the review queue...</p>
+
+    <div id="questions-panel" class="tab-panel console-panel" role="tabpanel" aria-labelledby="questions-tab">
+      <div class="console-intro"><h2>Questions awaiting review</h2><p>Decline questions that are inappropriate, outside our domains, or settled by a lookup or calculation. Tighten the wording before approving, because the approved wording is what members see and what the consortium investigates.</p></div>
+      <div id="pending-questions" class="review-list"></div>
+    </div>
+
+    <div id="flags-panel" class="tab-panel console-panel" role="tabpanel" aria-labelledby="flags-tab" hidden>
+      <div class="console-intro"><h2>Flagged questions</h2><p>Flags never change upvotes. Resolve a flag when you acted on it, or dismiss it when the question is within policy.</p></div>
+      <div id="flagged-questions" class="review-list"></div>
+    </div>
+
+    {% if is_admin %}
+    <div id="members-panel" class="tab-panel console-panel" role="tabpanel" aria-labelledby="members-tab" hidden>
+      <div class="console-intro"><h2>Invitation requests</h2><p>Approving an address lets it sign in and emails the person a sign-in link. Access mode: <strong>{{ access_mode }}</strong>.</p></div>
+      <form id="invite-form" class="invite-form">
+        <p class="eyebrow">Invite someone directly</p>
+        <label for="invite-email"><span>Email</span><input id="invite-email" type="email" maxlength="320" required></label>
+        <label for="invite-name"><span>Name <small>(optional)</small></span><input id="invite-name" maxlength="200"></label>
+        <label for="invite-reason"><span>Reason</span><input id="invite-reason" maxlength="1000" required value="Invited to the early-access cohort."></label>
+        <button class="button dark" type="submit">Invite</button>
+      </form>
+      <div class="access-filter"><label for="access-status"><span>Show</span><select id="access-status"><option value="pending">Pending requests</option><option value="approved">Members</option><option value="declined">Declined</option><option value="revoked">Revoked</option><option value="all">Everyone</option></select></label></div>
+      <div id="access-requests" class="review-list"></div>
+    </div>
+
+    <div id="cycle-panel" class="tab-panel console-panel" role="tabpanel" aria-labelledby="cycle-tab" hidden>
+      <div class="console-intro"><h2>Weekly cycle</h2><p>Members upvote while a cycle is open. Closing it selects the most-upvoted question in each domain (at least one upvote) for this week's investigations. Override a domain only with a public reason.</p></div>
+      <div id="cycle-state" class="cycle-state"></div>
+      <div id="cycle-standings" class="cycle-standings"></div>
+      <div id="cycle-history" class="cycle-history"></div>
+    </div>
+    {% endif %}
+    {% else %}
+    <div class="editor-access"><h2>Reviewer access required</h2><p>Sign in with an address that has the moderator or administrator role.</p><a class="button dark" href="/login?next=/moderation">Sign in</a></div>
+    {% endif %}
+  </div>
+</section>
+{% if authorized %}
+<script defer src="{{ url_for('static', path='moderation.js') }}" data-admin="{{ 'true' if is_admin else 'false' }}" id="moderation-script"></script>
+{% endif %}
+{% endblock %}

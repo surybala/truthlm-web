@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Editorial review — TruthLM{% endblock %}
+{% block body_class %}editor-page{% endblock %}
+{% block content %}
+<header class="page-header editor-header">
+  <div class="section-inner">
+    <p class="eyebrow light">Restricted editorial workspace</p>
+    <h1>Review the record before publishing the answer.</h1>
+    <p>Inspect every Core gate, source, limitation, disagreement, and computation. Publishing records your identity and makes the revision public.</p>
+  </div>
+</header>
+<section class="editor-band">
+  <div class="section-inner">
+    {% if authorized %}
+    <div class="editor-session"><p><strong>Authenticated editorial session</strong></p><p id="editor-status" role="status">Loading the review queue...</p></div>
+    <div class="editor-workspace" id="editor-workspace">
+      <aside><p class="eyebrow">Publication revisions</p><div id="editor-queue" class="editor-queue"></div></aside>
+      <section id="editor-detail" class="editor-detail"><p>Select a revision to inspect its research record.</p></section>
+    </div>
+    {% else %}
+    <div class="editor-access"><h2>Editorial access required</h2><p>Sign in with an address assigned the editor or administrator role.</p><a class="button dark" href="/login?next=/editor">Sign in</a></div>
+    {% endif %}
+  </div>
+</section>
+{% if authorized %}
+<script defer src="{{ url_for('static', path='editor.js') }}"></script>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,136 @@
+from __future__ import annotations
+
+import os
+import re
+from pathlib import Path
+
+import pytest
+from alembic import command
+from alembic.config import Config
+from sqlalchemy import inspect
+
+from orl_web.config import Settings
+from orl_web.models import AuditEvent, MetricsSnapshot, User
+
+
+ROOT = Path(__file__).resolve().parents[1]
+REQ = re.compile(r"^\s*-\s+\*\*([A-Z0-9]+-[A-Z0-9]+-\d{3})\*\*", re.M)
+MARK = re.compile(r"mark\.spec\(([^)]*)\)")
+ID = re.compile(r"[\"']([A-Z0-9]+-[A-Z0-9]+-\d{3})[\"']")
+
+
+@pytest.mark.spec("WEB-ARCH-001")
+def test_project_does_not_import_core_modules():
+    source = "\n".join(path.read_text() for path in (ROOT / "orl_web").rglob("*.py"))
+    assert not re.search(r"(?:from|import)\s+orl(?:\.|\s|$)", source)
+    assert "catalog.db" not in source and "QDRANT" not in source
+
+
+@pytest.mark.spec("WEB-OPS-001")
+def test_initial_migration_upgrades_and_downgrades(tmp_path):
+    db = tmp_path / "migration.db"
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "migrations"))
+    cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db}")
+    command.upgrade(cfg, "head")
+    engine = __import__("sqlalchemy").create_engine(f"sqlite:///{db}")
+    tables = set(inspect(engine).get_table_names())
+    assert {"users", "question_submissions", "question_clusters", "cluster_memberships", "votes",
+            "weekly_cycles", "readiness_assessments", "metrics_snapshots", "publication_bundles",
+            "articles", "article_revisions", "audit_events", "magic_link_tokens",
+            "browser_sessions", "question_reports", "research_subscriptions",
+            "feed_access_tokens", "access_requests", "cycle_selections"} <= tables
+    inspector = inspect(engine)
+    assert "winner_cluster_id" not in {column["name"] for column in inspector.get_columns("weekly_cycles")}
+    assert "domain" in {column["name"] for column in inspector.get_columns("question_clusters")}
+    open_cycle = {index["name"]: index for index in inspector.get_indexes("weekly_cycles")}["uq_one_open_cycle"]
+    assert open_cycle["unique"]
+    with engine.connect() as connection:
+        ddl = connection.exec_driver_sql(
+            "SELECT sql FROM sqlite_master WHERE name = 'uq_one_open_cycle'").scalar()
+    assert "WHERE state = 'open'" in ddl
+    command.downgrade(cfg, "base")
+    assert set(inspect(engine).get_table_names()) <= {"alembic_version"}
+    engine.dispose()
+
+
+@pytest.mark.spec("WEB-OPS-001")
+def test_immutable_models_reject_application_updates(session_factory):
+    with session_factory() as session:
+        user = User(external_subject="actor", role="admin")
+        session.add(user)
+        session.flush()
+        event = AuditEvent(actor_id=user.id, action="test", target_type="test", target_id="1")
+        metric = MetricsSnapshot(snapshot_id="snapshot", generated_at=__import__("datetime").datetime.now(
+            __import__("datetime").UTC), content_sha256="a" * 64, payload={})
+        session.add_all([event, metric])
+        session.commit()
+        event.action = "changed"
+        with pytest.raises(ValueError, match="immutable"):
+            session.commit()
+
+
+@pytest.mark.spec("WEB-OPS-002")
+def test_project_env_file_is_loaded_without_overriding_the_environment(tmp_path, monkeypatch):
+    from orl_web import config
+
+    env_file = tmp_path / ".env"
+    env_file.write_text("ORL_WEB_ADMIN_EMAILS=Owner@Example.org\nORL_WEB_ACCESS_MODE=open\n")
+    monkeypatch.setattr(config, "PROJECT_ENV_FILE", env_file)
+    monkeypatch.setenv("ORL_WEB_ADMIN_EMAILS", "placeholder")
+    monkeypatch.delenv("ORL_WEB_ADMIN_EMAILS")  # restored to absent after the test
+    monkeypatch.setenv("ORL_WEB_ACCESS_MODE", "invite")
+    Settings.from_env()
+    assert "ORL_WEB_ADMIN_EMAILS" not in os.environ  # the suite runs with ORL_WEB_DOTENV=0
+    monkeypatch.setenv("ORL_WEB_DOTENV", "1")
+    settings = Settings.from_env()
+    assert settings.admin_emails == ("owner@example.org",)
+    assert settings.access_mode == "invite"
+    assert config.PROJECT_ENV_FILE.name == ".env"
+    monkeypatch.undo()
+    assert Path(config.PROJECT_ENV_FILE) == ROOT / ".env"
+    assert "load_env_file()" in (ROOT / "migrations" / "env.py").read_text()
+
+
+@pytest.mark.spec("WEB-OPS-002")
+def test_suite_does_not_inherit_web_configuration():
+    assert os.environ["ORL_WEB_DOTENV"] == "0"
+    assert not [name for name in os.environ if name.startswith("ORL_WEB_") and name != "ORL_WEB_DOTENV"]
+
+
+def test_spec_traceability():
+    ids = REQ.findall((ROOT / "specs" / "SPEC-WEB.md").read_text())
+    cited = set()
+    for path in (ROOT / "tests").glob("test_*.py"):
+        for marker in MARK.finditer(path.read_text()):
+            cited.update(ID.findall(marker.group(1)))
+    assert len(ids) == len(set(ids)) and set(ids) == cited
+
+
+def test_production_configuration_rejects_unsafe_defaults():
+    with pytest.raises(ValueError, match="JWT"):
+        Settings(environment="production", database_url="postgresql+psycopg://db", jwt_secret="short").validate()
+    with pytest.raises(ValueError, match="PostgreSQL"):
+        Settings(environment="production", database_url="sqlite:///x",
+                 jwt_secret="x" * 40).validate()
+    with pytest.raises(ValueError, match="rate limits"):
+        Settings(question_limit_per_hour=0).validate()
+    with pytest.raises(ValueError, match="rate limits"):
+        Settings(access_request_limit_per_hour=0).validate()
+    with pytest.raises(ValueError, match="access mode"):
+        Settings(access_mode="public").validate()
+    for domains in ((), ("Economics", "economics"), ("!!!",), ("Unassigned",), ("x" * 65,)):
+        with pytest.raises(ValueError, match="domains"):
+            Settings(domains=domains).validate()
+
+
+@pytest.mark.spec("WEB-Q-006", "WEB-ACCESS-001")
+def test_access_mode_and_domains_are_read_from_the_environment(monkeypatch):
+    monkeypatch.setenv("ORL_WEB_ACCESS_MODE", " Open ")
+    monkeypatch.setenv("ORL_WEB_DOMAINS", "Physics, Materials  Science,,Physics")
+    monkeypatch.setenv("ORL_WEB_ACCESS_REQUEST_LIMIT_PER_HOUR", "7")
+    settings = Settings.from_env()
+    assert settings.access_mode == "open" and settings.access_request_limit_per_hour == 7
+    assert settings.domain_labels == {"physics": "Physics", "materials-science": "Materials Science"}
+    monkeypatch.delenv("ORL_WEB_DOMAINS")
+    assert list(Settings.from_env().domain_labels) == ["economics", "finance", "mathematics", "statistics"]

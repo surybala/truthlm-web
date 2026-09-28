@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.orl.dev/v1/metrics-snapshot.schema.json",
+  "title": "ORL public metrics snapshot v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "snapshot_id", "generated_at", "corpus_snapshot", "core_version", "pipeline", "metrics", "dimensions", "vector", "content_sha256"],
+  "$defs": {
+    "metric": {
+      "type": "object", "additionalProperties": false,
+      "required": ["value", "unit", "definition"],
+      "properties": {
+        "value": {"type": "integer", "minimum": 0},
+        "unit": {"type": "string", "minLength": 1, "maxLength": 32},
+        "definition": {"type": "string", "minLength": 1, "maxLength": 300}
+      }
+    },
+    "dimension": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["label", "count"],
+        "properties": {
+          "label": {"type": "string", "minLength": 1, "maxLength": 100},
+          "count": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  },
+  "properties": {
+    "schema_version": {"const": "1"},
+    "snapshot_id": {"type": "string", "pattern": "^metrics-[0-9]{8}T[0-9]{6}Z-[a-f0-9]{12}$"},
+    "generated_at": {"type": "string", "format": "date-time"},
+    "corpus_snapshot": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "core_version": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:[-+][A-Za-z0-9.-]+)?$"},
+    "pipeline": {
+      "type": "object", "additionalProperties": false,
+      "required": ["index_version", "embedding_model", "reranking_model"],
+      "properties": {
+        "index_version": {"type": "integer", "minimum": 0},
+        "embedding_model": {"type": "string", "minLength": 1, "maxLength": 200},
+        "reranking_model": {"type": "string", "minLength": 1, "maxLength": 200}
+      }
+    },
+    "metrics": {
+      "type": "object", "additionalProperties": false,
+      "required": ["papers", "chunks", "equations", "references", "source_files", "source_bytes", "parsed_files", "parsed_bytes"],
+      "properties": {
+        "papers": {"$ref": "#/$defs/metric"}, "chunks": {"$ref": "#/$defs/metric"},
+        "equations": {"$ref": "#/$defs/metric"}, "references": {"$ref": "#/$defs/metric"},
+        "source_files": {"$ref": "#/$defs/metric"}, "source_bytes": {"$ref": "#/$defs/metric"},
+        "parsed_files": {"$ref": "#/$defs/metric"}, "parsed_bytes": {"$ref": "#/$defs/metric"}
+      }
+    },
+    "dimensions": {
+      "type": "object", "additionalProperties": false, "required": ["domain", "status", "evidence"],
+      "properties": {
+        "domain": {"$ref": "#/$defs/dimension"}, "status": {"$ref": "#/$defs/dimension"},
+        "evidence": {"$ref": "#/$defs/dimension"}
+      }
+    },
+    "vector": {
+      "type": "object", "additionalProperties": false,
+      "required": ["backend", "total_chunks", "indexed_chunks", "missing_chunks", "coverage_ratio", "sync_state"],
+      "properties": {
+        "backend": {"enum": ["sqlite", "qdrant"]}, "total_chunks": {"type": "integer", "minimum": 0},
+        "indexed_chunks": {"type": "integer", "minimum": 0}, "missing_chunks": {"type": "integer", "minimum": 0},
+        "coverage_ratio": {"type": "number", "minimum": 0, "maximum": 1},
+        "sync_state": {"enum": ["current", "pending"]}
+      }
+    },
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

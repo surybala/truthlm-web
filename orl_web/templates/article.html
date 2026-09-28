@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_share_icon.html" import share_icon %}
+{% from "_bibliography.html" import bibliography %}
+{% block title %}{{ article.title }} — TruthLM{% endblock %}
+{% block description %}{{ article.summary }}{% endblock %}
+{% block social_meta %}
+  <link rel="canonical" href="{{ canonical_url }}">
+  <meta property="og:site_name" content="TruthLM">
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="{{ article.title }}">
+  <meta property="og:description" content="{{ article.summary }}">
+  <meta property="og:url" content="{{ canonical_url }}">
+  <meta property="og:image" content="{{ base_url }}/static/images/truthlm-research-workspace.png">
+  <meta property="og:image:alt" content="A researcher's desk with papers, notes, and charts">
+  {% if article.published_at %}<meta property="article:published_time" content="{{ article.published_at.strftime('%Y-%m-%dT%H:%M:%SZ') }}">{% endif %}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ article.title }}">
+  <meta name="twitter:description" content="{{ article.summary }}">
+{% endblock %}
+{% block content %}
+<article class="investigation">
+  {% if article.status == 'retracted' %}
+  <aside class="retraction-banner" role="alert"><strong>This investigation has been retracted.</strong><span>{{ revision.review_note }}</span></aside>
+  {% endif %}
+  <header class="article-header">
+    <div class="article-header-inner">
+      <p class="eyebrow light">A TruthLM investigation</p>
+      <h1>{{ article.title }}</h1>
+      <p class="article-dek">{{ article.summary }}</p>
+      <div class="article-byline"><span>Published {{ article.published_at.strftime('%B %d, %Y') }}</span><span>Revision {{ revision.revision }}</span><span>{{ references | length }} cited papers</span><span>{{ record.expert_contributions | length }} expert perspectives</span></div>
+      <div class="share-bar" aria-label="Share this investigation" data-share-url="{{ canonical_url }}" data-share-title="{{ article.title }}" data-share-text="{{ article.summary }}">
+        <span class="share-label">Share this investigation</span>
+        <button type="button" class="share-native" hidden aria-label="Share using your device" title="Share using your device"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><path d="m8.6 10.5 6.8-4M8.6 13.5l6.8 4"/></svg><span class="visually-hidden">Share</span></button>
+        {% for link in share_links %}<a class="share-{{ link.network }}" href="{{ link.href }}" aria-label="Share via {{ link.label }}" title="Share via {{ link.label }}" {% if link.network != 'email' %}target="_blank" rel="noopener noreferrer"{% endif %}>{{ share_icon(link.network) }}<span class="visually-hidden">{{ link.label }}</span></a>{% endfor %}
+        <button type="button" class="share-copy" aria-label="Copy article link" title="Copy article link"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg><span class="visually-hidden">Copy link</span></button>
+        <span class="share-status" role="status"></span>
+      </div>
+    </div>
+  </header>
+
+  <nav class="article-tabs" aria-label="Investigation views">
+    <div class="section-inner" role="tablist">
+      <button role="tab" aria-selected="true" aria-controls="answer-panel" id="answer-tab" data-tab="answer-panel">Findings</button>
+      <button role="tab" aria-selected="false" aria-controls="record-panel" id="record-tab" data-tab="record-panel">Research record</button>
+      <button role="tab" aria-selected="false" aria-controls="sources-panel" id="sources-tab" data-tab="sources-panel">Evidence &amp; sources</button>
+    </div>
+  </nav>
+
+  <div id="answer-panel" class="tab-panel" role="tabpanel" aria-labelledby="answer-tab">
+    <div class="article-layout section-inner">
+      <div class="article-prose">{{ article_html | safe }}{{ bibliography(references, 'References', false) }}</div>
+      <aside class="article-aside">
+        {% if record.open_questions %}<div class="think-further"><p class="eyebrow">Think further</p><h2>Questions this leaves open</h2><ul>{% for item in record.open_questions %}<li>{{ item }}</li>{% endfor %}</ul><p>These are the best starting points for your own work. <a href="#record-panel" data-tab-link="record-panel">See the full research record</a>.</p></div>{% endif %}
+        <div><p class="eyebrow">Research status</p>{% for gate in gates %}<p class="gate"><span class="gate-dot {{ 'pass' if gate.passed else 'fail' }}"></span>{{ gate.name | replace('_', ' ') | title }}</p>{% endfor %}</div>
+        {% if record.limitations %}<div><p class="eyebrow">Material limitations</p><ul>{% for item in record.limitations %}<li>{{ item }}</li>{% endfor %}</ul></div>{% endif %}
+      </aside>
+    </div>
+  </div>
+
+  <div id="record-panel" class="tab-panel" role="tabpanel" aria-labelledby="record-tab" hidden>
+    <div class="record-layout section-inner">
+      <section class="record-intro">
+        <p class="eyebrow">Research question</p><h2>{{ record.question }}</h2>
+        <p>{{ record.scope.statement }}</p>
+        {% if record.scope.assumptions %}<div class="assumption-line"><strong>Assumptions</strong>{% for item in record.scope.assumptions %}<span>{{ item }}</span>{% endfor %}</div>{% endif %}
+      </section>
+
+      <section class="record-section"><div class="record-heading"><p class="eyebrow">Methodology</p><h2>How the investigation was run</h2></div><div class="methodology-list">{% for item in record.methodology %}<div><span class="status-label {{ item.status }}">{{ item.status | replace('_', ' ') }}</span><h3>{{ item.stage }}</h3><p>{{ item.summary }}</p></div>{% endfor %}</div></section>
+
+      <section class="record-section"><div class="record-heading"><p class="eyebrow">Independent perspectives</p><h2>What each expert brought</h2></div><div class="expert-grid">{% for expert in record.expert_contributions %}<article><p class="expert-role">{{ expert.role }}</p><h3>{{ expert.expert | replace('_', ' ') | title }}</h3><p>{{ expert.perspective }}</p><ul>{% for finding in expert.findings %}<li>{{ finding }}</li>{% endfor %}</ul></article>{% endfor %}</div></section>
+
+      {% if record.disagreements %}<section class="record-section disagreement-section"><div class="record-heading"><p class="eyebrow">Disagreement</p><h2>Where the consortium did not converge</h2></div>{% for item in record.disagreements %}<article class="disagreement"><h3>{{ item.question }}</h3><div class="position-grid">{% for position in item.positions %}<div><strong>{{ position.expert | replace('_', ' ') | title }}</strong><p>{{ position.position }}</p></div>{% endfor %}</div><p class="resolution"><strong>Resolution</strong> {{ item.resolution }}</p></article>{% endfor %}</section>{% endif %}
+
+      {% if record.computations %}<section class="record-section"><div class="record-heading"><p class="eyebrow">Computation</p><h2>What was calculated or reproduced</h2></div><div class="computation-list">{% for item in record.computations %}<article><h3>{{ item.name }}</h3><dl><dt>Method</dt><dd>{{ item.method }}</dd><dt>Inputs</dt><dd>{{ item.inputs }}</dd><dt>Result</dt><dd>{{ item.result }}</dd><dt>Reproduce</dt><dd>{{ item.reproducibility }}</dd></dl></article>{% endfor %}</div></section>{% endif %}
+
+      <section class="record-section research-journey"><div class="record-heading"><p class="eyebrow">Research journey</p><h2>How the answer earned its confidence</h2><p>The consequential decisions and checks, condensed from the complete signed audit record.</p></div><ol>{% for item in research_journey %}<li><span class="journey-index">{{ '%02d' | format(item.sequence) }}</span><div><div class="journey-meta"><span class="status-label {{ item.status }}">{{ item.status | replace('_', ' ') }}</span>{% if item.participants %}<span>{{ item.participants | map('replace', '_', ' ') | map('title') | join(', ') }}</span>{% endif %}</div><h3>{{ item.title }}</h3><p>{{ item.summary }}</p>{% if item.evidence_refs %}<small>Connected evidence: {{ item.evidence_refs | join(', ') }}</small>{% endif %}</div></li>{% endfor %}</ol><details class="technical-audit"><summary>Technical audit trail <span>{{ audit_event_count }} timestamped events retained</span></summary><p>The signed Core record preserves instrument executions, failures, expert task boundaries, and rendering events for reproducibility and editorial inspection. The reader view summarizes them by scientific purpose instead of exposing internal orchestration method names.</p></details></section>
+
+      <section class="open-questions"><div><p class="eyebrow light">What remains</p><h2>Open questions and limitations</h2></div><div>{% if record.limitations %}<h3>Limitations</h3><ul>{% for item in record.limitations %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}{% if record.open_questions %}<h3>Promising next questions</h3><ul>{% for item in record.open_questions %}<li>{{ item }}</li>{% endfor %}</ul>{% endif %}</div></section>
+
+      {% if history | length > 1 %}<section class="record-section revision-history"><div class="record-heading"><p class="eyebrow">Publication history</p><h2>Corrections and prior revisions</h2></div><ol>{% for item in history %}<li><strong>Revision {{ item.revision }} · {{ item.status | title }}</strong><span>{{ item.published_at.strftime('%B %d, %Y') if item.published_at else item.created_at.strftime('%B %d, %Y') }}</span>{% if item.correction_summary %}<p>{{ item.correction_summary }}</p>{% endif %}{% if item.review_note %}<p>{{ item.review_note }}</p>{% endif %}</li>{% endfor %}</ol></section>{% endif %}
+    </div>
+  </div>
+
+  <div id="sources-panel" class="tab-panel" role="tabpanel" aria-labelledby="sources-tab" hidden>
+    <div class="sources-layout section-inner">
+      <section><p class="eyebrow">Claim audit</p><h2>Evidence map</h2><div class="evidence-list">{% for item in record.evidence_map %}<article><span class="verdict {{ item.verdict }}">{{ item.verdict }}</span><h3>{{ item.claim }}</h3><p><strong>Supports</strong> {{ item.supporting_citations | join(', ') if item.supporting_citations else 'No cited support' }}</p>{% if item.contradicting_citations %}<p><strong>Challenges</strong> {{ item.contradicting_citations | join(', ') }}</p>{% endif %}</article>{% endfor %}</div></section>
+      {{ bibliography(references) }}
+    </div>
+  </div>
+</article>
+{% endblock %}

@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Research archive — TruthLM{% endblock %}
+{% block body_class %}research-page{% endblock %}
+{% block content %}
+<header class="page-header research-header">
+  <div class="section-inner">
+    <p class="eyebrow light">Research archive</p>
+    <h1>Published investigations</h1>
+    <p>Long-form answers with their evidence, methodology, expert perspectives, computations, disagreements, and unresolved questions attached.</p>
+    <a class="feed-link" href="/feeds/research.xml"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 11a8 8 0 0 1 8 8M5 5a14 14 0 0 1 14 14M6 19h.01"/></svg>Subscribe to the weekly research feed</a>
+    <form class="search-form" action="/research" method="get" role="search">
+      <label for="research-search">Search the archive</label>
+      <div><input id="research-search" name="q" value="{{ q }}" maxlength="200" placeholder="Search questions and summaries"><button type="submit"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg><span>Search</span></button></div>
+    </form>
+  </div>
+</header>
+<section class="archive-band">
+  <div class="section-inner">
+    {% if articles %}
+    <div class="archive-list">
+      {% for article in articles %}
+      <article>
+        <p class="article-meta">{{ article.published_at.strftime('%B %d, %Y') }} · Full research record</p>
+        <h2><a href="/research/{{ article.slug }}">{{ article.title }}</a></h2>
+        <p>{{ article.summary }}</p>
+        <a class="text-link" href="/research/{{ article.slug }}">Open investigation <span aria-hidden="true">→</span></a>
+      </article>
+      {% endfor %}
+    </div>
+    {% else %}
+    <div class="archive-empty">
+      <h2>{% if q %}No investigation matches “{{ q }}”.{% else %}The first investigation is still under review.{% endif %}</h2>
+      <p>{% if q %}Try a broader scientific concept or browse again without a search term.{% else %}Completed work will appear only after evidence, originality, copyright, and editorial gates pass.{% endif %}</p>
+      {% if q %}<a class="button dark" href="/research">Clear search</a>{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

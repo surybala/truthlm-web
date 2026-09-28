@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.orl.dev/v1/readiness-assessment.schema.json",
+  "title": "ORL readiness assessment v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "assessment_id", "cluster_id", "question_revision", "assessed_at", "expires_at", "corpus_snapshot", "label", "confidence", "reasons"],
+  "properties": {
+    "schema_version": {"const": "1"},
+    "assessment_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "cluster_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "question_revision": {"type": "integer", "minimum": 1},
+    "assessed_at": {"type": "string", "format": "date-time"},
+    "expires_at": {"type": "string", "format": "date-time"},
+    "corpus_snapshot": {"type": "string", "pattern": "^sha256:[a-f0-9]{64}$"},
+    "label": {"enum": ["strong", "moderate", "limited", "insufficient"]},
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "reasons": {
+      "type": "array", "minItems": 1, "maxItems": 20,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["code", "summary"],
+        "properties": {
+          "code": {"type": "string", "pattern": "^[a-z][a-z0-9_]{1,63}$"},
+          "summary": {"type": "string", "minLength": 1, "maxLength": 500}
+        }
+      }
+    }
+  }
+}

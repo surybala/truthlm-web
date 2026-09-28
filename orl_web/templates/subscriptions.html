@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Research subscriptions — TruthLM{% endblock %}
+{% block body_class %}subscriptions-page{% endblock %}
+{% block content %}
+<header class="page-header subscriptions-header">
+  <div class="section-inner subscriptions-heading">
+    <div><p class="eyebrow light">Research subscriptions</p><h1>Follow the work that matters to you.</h1></div>
+    <p>Use the public feed for every weekly investigation, or build a personal feed around scientific domains and researchers cited in published work.</p>
+  </div>
+</header>
+<section class="subscriptions-band">
+  <div class="section-inner subscriptions-layout">
+    <section class="feed-section" aria-labelledby="public-feed-title">
+      <p class="eyebrow">Every investigation</p>
+      <h2 id="public-feed-title">Weekly TruthLM research</h2>
+      <p>Add this public feed to any RSS reader. New published investigations and corrected revisions appear automatically.</p>
+      <div class="feed-url-row">
+        <input id="public-feed-url" value="{{ public_feed_url }}" readonly aria-label="Public RSS feed URL">
+        <button class="button dark copy-feed" type="button" data-copy="public-feed-url">Copy feed URL</button>
+      </div>
+    </section>
+
+    <section class="feed-section personal-feed-section" aria-labelledby="personal-feed-title">
+      <p class="eyebrow">Your interests</p>
+      <h2 id="personal-feed-title">Personal research feed</h2>
+      <p>Select any combination. A publication appears once when it matches at least one interest.</p>
+      <div id="subscription-status" class="subscription-status" role="status">Loading your subscriptions...</div>
+      <div class="selected-subscriptions">
+        <h3>Following</h3>
+        <div id="selected-subscriptions"></div>
+      </div>
+      <div class="interest-options">
+        <section><h3>Domains from published research</h3><div id="domain-options" class="option-list"></div></section>
+        <section><h3>Researchers in cited work</h3><div id="researcher-options" class="option-list"></div></section>
+      </div>
+      <div class="custom-interests">
+        <form class="interest-form" data-kind="domain"><label for="custom-domain">Add a domain</label><div><input id="custom-domain" maxlength="160" required placeholder="e.g. epidemiology"><button type="submit">Add</button></div></form>
+        <form class="interest-form" data-kind="researcher"><label for="custom-researcher">Add a researcher</label><div><input id="custom-researcher" maxlength="160" required placeholder="Researcher name"><button type="submit">Add</button></div></form>
+      </div>
+      <div class="personal-feed-controls">
+        <button id="generate-feed" class="button dark" type="button">Create personal feed URL</button>
+        <button id="revoke-feed" class="button quiet" type="button" hidden>Revoke current URL</button>
+      </div>
+      <div id="personal-feed-result" class="personal-feed-result" hidden>
+        <label for="personal-feed-url">Your private feed URL</label>
+        <p>This URL is shown after creation or rotation. Treat it like a password and add it to your RSS reader now.</p>
+        <div class="feed-url-row"><input id="personal-feed-url" readonly><button class="button dark copy-feed" type="button" data-copy="personal-feed-url">Copy feed URL</button></div>
+      </div>
+    </section>
+  </div>
+</section>
+<script defer src="{{ url_for('static', path='subscriptions.js') }}"></script>
+{% endblock %}

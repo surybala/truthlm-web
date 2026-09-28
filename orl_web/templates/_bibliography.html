@@ -1,0 +1,18 @@
+{% macro bibliography(references, heading='Papers cited in this investigation', show_eyebrow=true) %}
+<section class="bibliography">
+  {% if show_eyebrow %}<p class="eyebrow">References</p>{% endif %}
+  <h2>{{ heading }}</h2>
+  <ol>
+    {% for citation in references %}
+    <li id="reference-{{ citation.citation_id }}">
+      <span>{{ citation.citation_ids | join(', ') }}</span>
+      <div>
+        <strong>{{ citation.title }}</strong>
+        <p>{{ citation.authors | join(', ') }} · {{ citation.year }}</p>
+        {% if citation.doi %}<a href="https://doi.org/{{ citation.doi }}" rel="noreferrer">{{ citation.doi }}</a>{% elif citation.url %}<a href="{{ citation.url }}" rel="noreferrer">Read paper</a>{% endif %}
+      </div>
+    </li>
+    {% endfor %}
+  </ol>
+</section>
+{% endmacro %}

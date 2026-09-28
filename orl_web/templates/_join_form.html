@@ -1,0 +1,21 @@
+<form id="join-form" class="join-form" novalidate>
+  <div class="join-grid">
+    <label for="join-name"><span>Name</span><input id="join-name" name="name" maxlength="200" autocomplete="name" required></label>
+    <label for="join-email"><span>Email address</span><input id="join-email" name="email" type="email" maxlength="320" autocomplete="email" required placeholder="you@university.edu"></label>
+    <label for="join-role"><span>I am a</span>
+      <select id="join-role" name="role">
+        <option value="">Prefer not to say</option>
+        <option value="student">Student</option>
+        <option value="researcher">Researcher</option>
+        <option value="educator">Educator</option>
+        <option value="practitioner">Practitioner</option>
+        <option value="other">Something else</option>
+      </select>
+    </label>
+    <label for="join-discipline"><span>Field or area of study <small>(optional)</small></span><input id="join-discipline" name="discipline" maxlength="200" placeholder="e.g. econometrics"></label>
+  </div>
+  <label for="join-note"><span>What question are you trying to think through? <small>(optional)</small></span><textarea id="join-note" name="note" maxlength="1000" rows="3"></textarea></label>
+  <button class="button dark" type="submit">Request an invitation</button>
+  <p id="join-status" class="form-status" role="status">We use your email only to reply and to let you sign in. We never share it or show it to other members.</p>
+</form>
+<script defer src="{{ url_for('static', path='join.js') }}"></script>

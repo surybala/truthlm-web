@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Request an invitation — TruthLM{% endblock %}
+{% block body_class %}join-page{% endblock %}
+{% block content %}
+<section class="join-band join-standalone" aria-labelledby="join-title">
+  <div class="section-inner join-layout">
+    {% if access_mode == 'invite' %}
+    <div>
+      <p class="eyebrow">Early access</p>
+      <h1 id="join-title">Request an invitation</h1>
+      <p>TruthLM is invite-only while we open it gradually to students and researchers. Members submit questions that deserve research and upvote the ones they want investigated. Each week we publish an investigation of the top question in each domain.</p>
+      <p class="join-note">Everything we publish is open to read without an account: <a href="/research">the investigations</a> and <a href="/method">the method</a>.</p>
+      <p class="join-note">Already invited? <a href="/login">Sign in</a>.</p>
+    </div>
+    {% include "_join_form.html" %}
+    {% else %}
+    <div>
+      <p class="eyebrow">Membership</p>
+      <h1 id="join-title">TruthLM is open to everyone</h1>
+      <p>Sign in with your email address to submit questions and upvote the ones you want investigated.</p>
+    </div>
+    <div class="join-open"><a class="button dark" href="/login">Sign in with email</a></div>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

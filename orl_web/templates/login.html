@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Member sign in — TruthLM{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block content %}
+<section class="login-band">
+  <div class="login-layout">
+    <div>
+      <p class="eyebrow">TruthLM membership</p>
+      <h1>Member sign in</h1>
+      {% if access_mode == 'invite' %}
+      <p>TruthLM is invite-only during early access. Use the email address your invitation was sent to. We will email you a one-time link, and there is no password.</p>
+      <p class="login-aside">Not a member yet? <a href="/join">Request an invitation</a>. Everything we publish can be read without an account.</p>
+      {% else %}
+      <p>Sign in to submit questions, upvote the ones you want investigated, follow moderation decisions, and build a personal research feed.</p>
+      {% endif %}
+    </div>
+    <form id="login-form" class="login-form" data-next="{{ next_path }}">
+      <label for="login-email">Email address</label>
+      <input id="login-email" name="email" type="email" maxlength="320" autocomplete="email" required placeholder="you@example.org">
+      <button class="button dark" type="submit">Email me a sign-in link</button>
+      <p id="login-status" role="status">No password required. The link expires after {{ magic_link_minutes }} minutes and works once.</p>
+      {% if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
+    </form>
+  </div>
+</section>
+<script defer src="{{ url_for('static', path='auth.js') }}"></script>
+{% endblock %}

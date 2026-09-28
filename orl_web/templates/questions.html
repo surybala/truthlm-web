@@ -1,0 +1,65 @@
+{% extends "base.html" %}
+{% block title %}Member questions — TruthLM{% endblock %}
+{% block body_class %}queue-page{% endblock %}
+{% block content %}
+<header class="page-header queue-header">
+  <div class="section-inner queue-heading">
+    <div><p class="eyebrow light">Members only</p><h1>What deserves a real investigation?</h1></div>
+    <p>Ask questions that deserve research, and upvote the ones you most want investigated. Each week we investigate the top question in each domain. Upvotes decide what we look at next, never what is true.</p>
+  </div>
+</header>
+<section class="queue-band">
+  <div class="section-inner queue-shell">
+    <aside class="queue-sidebar">
+      <form id="question-form" class="question-form">
+        <p class="eyebrow">Ask a question</p>
+        <label for="question-text">Your research question</label>
+        <textarea id="question-text" maxlength="2000" minlength="20" rows="6" required placeholder="e.g. Do volatility-managed portfolios still outperform after realistic trading costs?"></textarea>
+        <div id="similar-questions" class="similar-questions" hidden></div>
+        <label for="question-domain">Domain</label>
+        <select id="question-domain">
+          <option value="">Let the reviewer decide</option>
+          {% for key, label in domain_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}
+        </select>
+        <div class="question-checklist">
+          <strong>Before you submit, check that your question:</strong>
+          <ul>
+            <li>cannot be settled by a lookup, a definition, or a calculator</li>
+            <li>names a population, setting, or time frame</li>
+            <li>could be answered differently depending on the evidence</li>
+            <li>is one you would change your mind about</li>
+          </ul>
+        </div>
+        <button class="button dark" type="submit">Send for review</button>
+        <p id="question-form-status" class="form-status" role="status">A person reviews every question before other members can see it.</p>
+      </form>
+      <section class="submission-history" aria-labelledby="history-title">
+        <p class="eyebrow">Your questions</p><h2 id="history-title">Review decisions</h2>
+        <div id="submission-history"><p class="loading-line">Loading your questions...</p></div>
+      </section>
+    </aside>
+    <div class="queue-main">
+      <div class="queue-toolbar">
+        <label class="queue-search" for="question-search"><span>Search questions</span><input id="question-search" type="search" placeholder="Search by topic or phrase"></label>
+        <label for="domain-filter"><span>Domain</span><select id="domain-filter"><option value="all">All domains</option></select></label>
+        <label for="readiness-filter"><span>Research readiness</span><select id="readiness-filter"><option value="all">All levels</option><option value="high">Strong backing</option><option value="medium">Developing</option><option value="low">Limited</option><option value="unassessed">Not assessed</option></select></label>
+      </div>
+      <div class="cycle-line"><strong id="cycle-label">Loading this week's cycle...</strong><span id="queue-count"></span></div>
+      <div id="question-results" class="question-results" aria-live="polite"></div>
+    </div>
+  </div>
+</section>
+<dialog id="report-dialog" class="report-dialog">
+  <form id="report-form">
+    <h2>Flag this question</h2>
+    <p>Flags go to the reviewers and do not change upvotes.</p>
+    <label for="report-reason">Reason</label>
+    <select id="report-reason" required><option value="spam">Spam</option><option value="abuse">Abusive content</option><option value="privacy">Personal information</option><option value="misleading">Misleading framing</option><option value="other">Other</option></select>
+    <label for="report-details">Details <span>(optional)</span></label>
+    <textarea id="report-details" maxlength="1000" rows="4"></textarea>
+    <p id="report-status" role="status"></p>
+    <div><button type="button" class="button report-cancel">Cancel</button><button type="submit" class="button dark">Send flag</button></div>
+  </form>
+</dialog>
+<script defer src="{{ url_for('static', path='questions.js') }}"></script>
+{% endblock %}

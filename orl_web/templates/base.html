@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  {% set default_description = "TruthLM is a thought assistant for students and researchers. Instead of handing you an answer, it publishes how a question is investigated: the evidence, the computations, the disagreements, and what is still unknown." %}
+  <meta name="description" content="{% block description %}{{ default_description }}{% endblock %}">
+  <title>{% block title %}TruthLM{% endblock %}</title>
+  {% block social_meta %}
+  <meta property="og:site_name" content="TruthLM">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="TruthLM — Questions before answers">
+  <meta property="og:description" content="{{ default_description }}">
+  <meta property="og:url" content="{{ base_url }}{{ request.url.path }}">
+  <meta property="og:image" content="{{ base_url }}/static/images/truthlm-research-workspace.png">
+  <meta name="twitter:card" content="summary_large_image">
+  {% endblock %}
+  <link rel="icon" href="{{ url_for('static', path='images/favicon.svg') }}" type="image/svg+xml">
+  <link rel="alternate" type="application/rss+xml" title="TruthLM Research" href="/feeds/research.xml">
+  <link rel="stylesheet" href="{{ url_for('static', path='site.css') }}?v=20260927-3">
+  <script defer src="{{ url_for('static', path='site.js') }}?v=20260927"></script>
+</head>
+<body class="{% block body_class %}{% endblock %}">
+  {% set viewer = request.state.principal %}
+  <header class="site-header">
+    <div class="header-inner">
+      <a class="brand" href="/" aria-label="TruthLM home"><span class="brand-mark" aria-hidden="true"></span>TruthLM</a>
+      <nav class="primary-nav" aria-label="Primary navigation">
+        <a href="/research"{% if request.url.path.startswith('/research') %} aria-current="page"{% endif %}>Investigations</a>
+        <a href="/method"{% if request.url.path == '/method' %} aria-current="page"{% endif %}>Method</a>
+        {% if viewer %}<a href="/questions"{% if request.url.path == '/questions' %} aria-current="page"{% endif %}>Questions</a>{% endif %}
+      </nav>
+      <div class="header-account">
+        {% if viewer %}
+        <details class="account-menu">
+          <summary aria-label="Open member menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
+            <span>Member</span>
+          </summary>
+          <div class="account-popover">
+            <p>{{ viewer.role.value | title }} access</p>
+            <a href="/subscriptions">Research subscriptions</a>
+            {% if viewer.role.value in ['moderator', 'admin'] %}<a href="/moderation">Review console</a>{% endif %}
+            {% if viewer.role.value in ['editor', 'admin'] %}<a href="/editor">Editorial workspace</a>{% endif %}
+            <button id="logout-button" type="button">Sign out</button>
+          </div>
+        </details>
+        {% else %}
+        <a class="header-signin" href="/login">Sign in</a>
+        {% if access_mode == 'invite' %}<a class="header-action" href="/join">Request access</a>{% endif %}
+        {% endif %}
+      </div>
+    </div>
+  </header>
+  <main>{% block content %}{% endblock %}</main>
+  <footer class="site-footer">
+    <div class="footer-inner">
+      <div class="footer-intro">
+        <a class="brand footer-brand" href="/"><span class="brand-mark" aria-hidden="true"></span>TruthLM</a>
+        <p>A thought assistant, not an answer machine. Follow the evidence, inspect the method, and decide what you think.</p>
+      </div>
+      <div class="footer-links">
+        <a href="/research">Investigations</a>
+        <a href="/method">Research method</a>
+        {% if viewer %}<a href="/questions">Questions</a>{% elif access_mode == 'invite' %}<a href="/join">Request access</a>{% endif %}
+        <a href="/feeds/research.xml">RSS feed</a>
+        <a href="/docs">API</a>
+      </div>
+      <p class="footer-legal">Scientific analysis for learning and research, not medical, legal, or investment advice.</p>
+    </div>
+  </footer>
+</body>
+</html>

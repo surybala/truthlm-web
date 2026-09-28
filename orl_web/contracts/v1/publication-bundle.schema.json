@@ -1,0 +1,182 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://contracts.orl.dev/v1/publication-bundle.schema.json",
+  "title": "ORL publication bundle v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "bundle_id", "request_id", "cluster_id", "revision", "supersedes_bundle_id", "correction_summary", "created_at", "article", "research_record", "citations", "gates", "content_sha256"],
+  "$defs": {
+    "shortText": {"type": "string", "minLength": 1, "maxLength": 1000},
+    "stringList": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 1000}}
+  },
+  "properties": {
+    "schema_version": {"const": "1"},
+    "bundle_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "request_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "cluster_id": {"type": "string", "minLength": 1, "maxLength": 128},
+    "revision": {"type": "integer", "minimum": 1},
+    "supersedes_bundle_id": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+    "correction_summary": {"type": "string", "maxLength": 1000},
+    "created_at": {"type": "string", "format": "date-time"},
+    "article": {
+      "type": "object", "additionalProperties": false,
+      "required": ["title", "slug", "summary", "markdown"],
+      "properties": {
+        "title": {"type": "string", "minLength": 1, "maxLength": 300},
+        "slug": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$", "maxLength": 160},
+        "summary": {"type": "string", "minLength": 1, "maxLength": 1000},
+        "markdown": {"type": "string", "minLength": 100, "maxLength": 200000}
+      }
+    },
+    "research_record": {
+      "type": "object", "additionalProperties": false,
+      "required": ["question", "scope", "methodology", "expert_contributions", "research_log", "evidence_map", "disagreements", "computations", "limitations", "open_questions"],
+      "properties": {
+        "question": {"type": "string", "minLength": 10, "maxLength": 2000},
+        "scope": {
+          "type": "object", "additionalProperties": false, "required": ["statement", "assumptions"],
+          "properties": {"statement": {"$ref": "#/$defs/shortText"}, "assumptions": {"$ref": "#/$defs/stringList"}}
+        },
+        "methodology": {
+          "type": "array", "minItems": 1, "maxItems": 50,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["stage", "status", "summary", "tools"],
+            "properties": {
+              "stage": {"type": "string", "minLength": 1, "maxLength": 100},
+              "status": {"enum": ["complete", "partial", "failed", "not_applicable"]},
+              "summary": {"$ref": "#/$defs/shortText"},
+              "tools": {"type": "array", "maxItems": 30, "items": {"type": "string", "minLength": 1, "maxLength": 100}}
+            }
+          }
+        },
+        "research_journey": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["sequence", "title", "status", "summary", "participants", "evidence_refs"],
+            "properties": {
+              "sequence": {"type": "integer", "minimum": 1, "maximum": 10},
+              "title": {"type": "string", "minLength": 1, "maxLength": 120},
+              "status": {"enum": ["complete", "partial", "failed", "not_applicable"]},
+              "summary": {"$ref": "#/$defs/shortText"},
+              "participants": {
+                "type": "array", "maxItems": 50,
+                "items": {"type": "string", "minLength": 1, "maxLength": 100}
+              },
+              "evidence_refs": {
+                "type": "array", "maxItems": 100,
+                "items": {"type": "string", "minLength": 1, "maxLength": 128}
+              }
+            }
+          }
+        },
+        "expert_contributions": {
+          "type": "array", "minItems": 1, "maxItems": 50,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["expert", "role", "perspective", "findings"],
+            "properties": {
+              "expert": {"type": "string", "minLength": 1, "maxLength": 100},
+              "role": {"type": "string", "minLength": 1, "maxLength": 200},
+              "perspective": {"$ref": "#/$defs/shortText"},
+              "findings": {"$ref": "#/$defs/stringList"}
+            }
+          }
+        },
+        "research_log": {
+          "type": "array", "minItems": 1, "maxItems": 500,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["sequence", "actor", "action", "status", "summary", "evidence_refs"],
+            "properties": {
+              "sequence": {"type": "integer", "minimum": 1},
+              "actor": {"type": "string", "minLength": 1, "maxLength": 100},
+              "action": {"type": "string", "minLength": 1, "maxLength": 200},
+              "status": {"enum": ["complete", "failed", "unresolved"]},
+              "summary": {"$ref": "#/$defs/shortText"},
+              "evidence_refs": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 128}}
+            }
+          }
+        },
+        "evidence_map": {
+          "type": "array", "minItems": 1, "maxItems": 500,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["claim", "verdict", "supporting_citations", "contradicting_citations"],
+            "properties": {
+              "claim": {"$ref": "#/$defs/shortText"},
+              "verdict": {"enum": ["supported", "mixed", "unsupported", "uncertain"]},
+              "supporting_citations": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 128}},
+              "contradicting_citations": {"type": "array", "maxItems": 100, "items": {"type": "string", "minLength": 1, "maxLength": 128}}
+            }
+          }
+        },
+        "disagreements": {
+          "type": "array", "maxItems": 100,
+          "items": {
+            "type": "object", "additionalProperties": false, "required": ["question", "positions", "resolution"],
+            "properties": {
+              "question": {"$ref": "#/$defs/shortText"},
+              "positions": {
+                "type": "array", "minItems": 2, "maxItems": 20,
+                "items": {
+                  "type": "object", "additionalProperties": false, "required": ["expert", "position"],
+                  "properties": {
+                    "expert": {"type": "string", "minLength": 1, "maxLength": 100},
+                    "position": {"$ref": "#/$defs/shortText"}
+                  }
+                }
+              },
+              "resolution": {"$ref": "#/$defs/shortText"}
+            }
+          }
+        },
+        "computations": {
+          "type": "array", "maxItems": 100,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["name", "method", "inputs", "result", "reproducibility"],
+            "properties": {
+              "name": {"type": "string", "minLength": 1, "maxLength": 200},
+              "method": {"$ref": "#/$defs/shortText"},
+              "inputs": {"$ref": "#/$defs/shortText"},
+              "result": {"$ref": "#/$defs/shortText"},
+              "reproducibility": {"$ref": "#/$defs/shortText"}
+            }
+          }
+        },
+        "limitations": {"$ref": "#/$defs/stringList"},
+        "open_questions": {"$ref": "#/$defs/stringList"}
+      }
+    },
+    "citations": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["citation_id", "title", "authors", "year"],
+        "properties": {
+          "citation_id": {"type": "string", "minLength": 1, "maxLength": 128},
+          "title": {"type": "string", "minLength": 1, "maxLength": 500},
+          "authors": {"type": "array", "items": {"type": "string", "maxLength": 200}, "maxItems": 100},
+          "year": {"type": ["integer", "null"], "minimum": 1000, "maximum": 3000},
+          "doi": {"type": ["string", "null"], "maxLength": 300},
+          "url": {"type": ["string", "null"], "format": "uri", "maxLength": 2000}
+        }
+      }
+    },
+    "gates": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false, "required": ["name", "passed", "version", "summary"],
+        "properties": {
+          "name": {"enum": ["research_review", "citation_support", "originality", "copyright", "equation_validation", "quantitative_validation", "editorial_review"]},
+          "passed": {"type": "boolean"},
+          "version": {"type": "string", "minLength": 1, "maxLength": 100},
+          "summary": {"type": "string", "minLength": 1, "maxLength": 500}
+        }
+      }
+    },
+    "content_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+  }
+}

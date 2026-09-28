@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Research method — TruthLM{% endblock %}
+{% block description %}The TruthLM research method: seven questions every investigation answers in the open, and the reproducible record we publish so anyone can check, challenge, or extend the work.{% endblock %}
+{% block body_class %}method-page{% endblock %}
+{% block content %}
+<header class="page-header method-header">
+  <div class="section-inner">
+    <p class="eyebrow light">Our research method</p>
+    <h1>A method is a set of questions you refuse to skip.</h1>
+    <p>TruthLM does not start from an answer and look for support. Every investigation works through the same seven questions and publishes what it found at each step. Use them to read our work critically, and to investigate questions of your own.</p>
+  </div>
+</header>
+
+<section class="method-band">
+  <div class="section-inner method-grid">
+    <aside><p class="eyebrow">The seven questions</p><h2>What every investigation must answer before it concludes</h2><p class="method-aside-note">Each question includes a prompt you can apply to any claim you read.</p></aside>
+    <div class="method-details">
+      <section><span>01</span><div><h3>What exactly is being asked?</h3><p>We state the population, outcome, time frame, and terms, and the assumptions we are making. A vague question cannot be wrong, so it cannot be tested.</p><p class="ask-yourself"><strong>Ask yourself:</strong> could two careful people read this question and mean different things?</p></div></section>
+      <section><span>02</span><div><h3>What would count as good evidence?</h3><p>Before retrieving anything, we write down what an answer would need: study designs, sample sizes, comparable outcomes.</p><p class="ask-yourself"><strong>Ask yourself:</strong> what result would make me change my mind?</p></div></section>
+      <section><span>03</span><div><h3>What does the research literature actually show?</h3><p>Domain experts search a curated library of legally sourced papers and screen for direct relevance. We keep what studies measured separate from what they claimed.</p><p class="ask-yourself"><strong>Ask yourself:</strong> is this finding from the source, or from someone's summary of it?</p></div></section>
+      <section><span>04</span><div><h3>Do the numbers hold up?</h3><p>Equations, statistics, and quantitative claims are recomputed with typed, deterministic tools. Quoted figures are not trusted. Failed reproductions are published.</p><p class="ask-yourself"><strong>Ask yourself:</strong> could I rerun this calculation from the stated inputs?</p></div></section>
+      <section><span>05</span><div><h3>Where do informed people disagree, and why?</h3><p>Independent experts work separately, then challenge each other's citations, assumptions, and boundary cases. We record disagreement instead of forcing consensus.</p><p class="ask-yourself"><strong>Ask yourself:</strong> what is the strongest version of the opposing view?</p></div></section>
+      <section><span>06</span><div><h3>What would change the conclusion?</h3><p>Every investigation names its limitations, sensitive assumptions, sparse evidence, and the cases where the conclusion stops holding.</p><p class="ask-yourself"><strong>Ask yourself:</strong> which single assumption, if false, breaks this answer?</p></div></section>
+      <section><span>07</span><div><h3>What should be investigated next?</h3><p>Investigations end with the questions they could not settle. Those questions are an invitation to students and researchers, and often a better starting point than the answer.</p><p class="ask-yourself"><strong>Ask yourself:</strong> what would I study next if I had a month?</p></div></section>
+    </div>
+  </div>
+</section>
+
+<section class="method-band record-band">
+  <div class="section-inner method-grid">
+    <aside><p class="eyebrow">What is public</p><h2>A reproducible record, not performative certainty</h2></aside>
+    <div class="method-details">
+      <section><span>A</span><div><h3>Research plan and scope</h3><p>The exact question, success criteria, population, outcomes, assumptions, exclusions, and expert assignments.</p></div></section>
+      <section><span>B</span><div><h3>Evidence and claim map</h3><p>Which sources support or contradict each material claim, with strength and uncertainty kept visible.</p></div></section>
+      <section><span>C</span><div><h3>Expert perspectives</h3><p>Independent findings, critiques, follow-up questions, and substantive disagreements without forced consensus.</p></div></section>
+      <section><span>D</span><div><h3>Computational provenance</h3><p>Methods, inputs, assumptions, tool versions, results, tolerances, and enough detail to rerun quantitative checks.</p></div></section>
+      <section><span>E</span><div><h3>Failures and limits</h3><p>Failed reproductions, unresolved audit findings, sparse evidence, boundary cases, and questions the investigation could not settle.</p></div></section>
+    </div>
+  </div>
+</section>
+
+<section class="reasoning-policy">
+  <div class="section-inner policy-layout">
+    <h2>Why we do not publish hidden chain-of-thought</h2>
+    <div><p>Private token-by-token model reasoning is not a reliable scientific artifact. It can contain unverified speculation, sensitive prompts, or source fragments, and it is not sufficient for reproduction.</p><p>Instead, we require concise rationales tied to evidence and tools: what was attempted, why it mattered, what happened, and what changed. That record is inspectable without mistaking fluent internal narration for proof.</p></div>
+  </div>
+</section>
+
+<section class="method-band selection-band">
+  <div class="section-inner method-grid">
+    <aside><p class="eyebrow">How questions are chosen</p><h2>Reviewed by people, prioritized by members</h2></aside>
+    <div class="selection-copy">
+      <p>Members submit questions during early access. A person reviews every question before other members can see it. We decline questions that are inappropriate, outside the domains we cover, or answerable with a lookup or a calculator, and we tell the member why.</p>
+      <p>Members upvote approved questions within each domain. Each week we investigate the top question in each domain ({{ domain_labels.values() | join(', ') }}). Upvotes choose what we look at next. They never decide what the evidence says.</p>
+      {% if access_mode == 'invite' and not request.state.principal %}<a class="button dark" href="/join">Request an invitation</a>{% endif %}
+    </div>
+  </div>
+</section>
+{% endblock %}
