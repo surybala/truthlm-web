@@ -19,6 +19,16 @@ def sign_in(client, mailer):
     return client.get("/v1/auth/session").json()["csrf_token"]
 
 
+@pytest.mark.spec("WEB-SUB-001")
+def test_subscription_controls_require_login(client):
+    response = client.get("/subscriptions", follow_redirects=False)
+    assert response.status_code == 303
+    assert response.headers["location"] == "/join"
+    gated_login = client.get("/login?next=/subscriptions", follow_redirects=False)
+    assert gated_login.status_code == 303 and gated_login.headers["location"] == "/join"
+    assert client.get("/v1/subscriptions").status_code == 401
+
+
 def publish(client, session_factory, *, bundle_id, slug, domain, researcher, research_domain=None):
     with session_factory() as session:
         cluster = QuestionCluster(canonical_question=f"What does the evidence show in {domain}?",
@@ -75,6 +85,10 @@ def test_personal_feed_matches_interests_and_supports_rotation_and_revocation(
             domain="physics", researcher="Nia Scientist")
     csrf = sign_in(client, mailer)
     headers = {"X-CSRF-Token": csrf}
+
+    signed_in_home = client.get("/")
+    assert "Join the waitlist" not in signed_in_home.text
+    assert 'id="join-form"' not in signed_in_home.text
 
     page = client.get("/subscriptions")
     assert page.status_code == 200 and "Personal research feed" in page.text

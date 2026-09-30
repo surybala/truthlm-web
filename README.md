@@ -12,6 +12,19 @@ The service hosts the publication experience, the invite-only membership list, q
 manual grouping, weekly per-domain selection, research-readiness labels, and sanitized Core
 metrics. It never imports ORL Core, opens the Core catalog, or connects to its vector store.
 
+## Launch posture and north star
+
+V1 opens to a small set of selected researchers who establish the queue with strong research
+questions. Every submission receives the same moderation, readiness, evidence, and editorial
+scrutiny. The initial investigations are intended to make the product concrete and attract more
+researchers.
+
+The product north star is broader: a researcher-owned private investigation workspace where a user
+can explicitly run a metered asynchronous Core job, keep its result private, or submit a finished
+article for publication. Browsers will not call Core directly. Web will mediate authorization,
+quotas, job state, private ownership, and publication while Core remains isolated behind authenticated
+versioned jobs. That lifecycle is not part of the V1 launch contract.
+
 ## Local setup
 
 ```bash
@@ -49,9 +62,9 @@ requests.
 
 Public pages:
 
-- `/` explains TruthLM as a thought assistant for students and researchers, presents the method as
-  seven questions, lists the latest investigations, describes how questions are chosen, and hosts
-  the invitation request form.
+- `/` explains TruthLM as a thought assistant and presents three access levels: open article
+  reading, signed-in research subscriptions, and an access request for paid private research. It
+  also lists the latest investigations.
 - `/join` is the standalone invitation request page.
 - `/research` provides a searchable archive of published investigations.
 - `/research/{slug}` renders the findings with their open questions and limitations, the structured

@@ -39,21 +39,4 @@
   </div>
 </section>
 
-<section class="reasoning-policy">
-  <div class="section-inner policy-layout">
-    <h2>Why we do not publish hidden chain-of-thought</h2>
-    <div><p>Private token-by-token model reasoning is not a reliable scientific artifact. It can contain unverified speculation, sensitive prompts, or source fragments, and it is not sufficient for reproduction.</p><p>Instead, we require concise rationales tied to evidence and tools: what was attempted, why it mattered, what happened, and what changed. That record is inspectable without mistaking fluent internal narration for proof.</p></div>
-  </div>
-</section>
-
-<section class="method-band selection-band">
-  <div class="section-inner method-grid">
-    <aside><p class="eyebrow">How questions are chosen</p><h2>Reviewed by people, prioritized by members</h2></aside>
-    <div class="selection-copy">
-      <p>Members submit questions during early access. A person reviews every question before other members can see it. We decline questions that are inappropriate, outside the domains we cover, or answerable with a lookup or a calculator, and we tell the member why.</p>
-      <p>Members upvote approved questions within each domain. Each week we investigate the top question in each domain ({{ domain_labels.values() | join(', ') }}). Upvotes choose what we look at next. They never decide what the evidence says.</p>
-      {% if access_mode == 'invite' and not request.state.principal %}<a class="button dark" href="/join">Request an invitation</a>{% endif %}
-    </div>
-  </div>
-</section>
 {% endblock %}

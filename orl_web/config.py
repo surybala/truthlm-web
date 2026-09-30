@@ -57,6 +57,7 @@ class Settings:
     smtp_starttls: bool = True
     admin_emails: tuple[str, ...] = ()
     editor_emails: tuple[str, ...] = ()
+    paid_emails: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -88,6 +89,7 @@ class Settings:
             smtp_starttls=os.environ.get("ORL_WEB_SMTP_STARTTLS", "true").lower() in {"1", "true", "yes"},
             admin_emails=_emails("ORL_WEB_ADMIN_EMAILS"),
             editor_emails=_emails("ORL_WEB_EDITOR_EMAILS"),
+            paid_emails=_emails("ORL_WEB_PAID_EMAILS"),
         )
         settings.validate()
         return settings

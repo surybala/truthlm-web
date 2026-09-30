@@ -74,6 +74,10 @@ class EditorialReason(StrictModel):
     reason: str = Field(min_length=3, max_length=2000)
 
 
+class PrivateAnswer(StrictModel):
+    answer: str = Field(min_length=20, max_length=100000)
+
+
 class MagicLinkRequest(StrictModel):
     email: str = Field(min_length=3, max_length=320)
     next_path: str = Field(default="/questions", alias="next", max_length=300)

@@ -12,10 +12,10 @@
         <option value="other">Something else</option>
       </select>
     </label>
-    <label for="join-discipline"><span>Field or area of study <small>(optional)</small></span><input id="join-discipline" name="discipline" maxlength="200" placeholder="e.g. econometrics"></label>
+    <label for="join-discipline"><span>Field or area of study <small>(optional)</small></span><input id="join-discipline" name="discipline" maxlength="200" placeholder="e.g. economics"></label>
   </div>
   <label for="join-note"><span>What question are you trying to think through? <small>(optional)</small></span><textarea id="join-note" name="note" maxlength="1000" rows="3"></textarea></label>
-  <button class="button dark" type="submit">Request an invitation</button>
+  <button class="button dark" type="submit">{{ join_submit_label | default("Join the waitlist") }}</button>
   <p id="join-status" class="form-status" role="status">We use your email only to reply and to let you sign in. We never share it or show it to other members.</p>
 </form>
 <script defer src="{{ url_for('static', path='join.js') }}"></script>

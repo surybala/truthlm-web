@@ -16,13 +16,16 @@ def test_health_and_authentication_boundary(client):
     assert client.post("/v1/questions", json={"text": "A sufficiently long research question here."},
                        headers={"Idempotency-Key": "abcdefgh"}).status_code == 401
     assert client.post("/v1/questions", json={"text": "too short"},
-                       headers={**auth(), "Idempotency-Key": "abcdefgh"}).status_code == 422
+                       headers={**auth(role="paid"), "Idempotency-Key": "abcdefgh"}).status_code == 422
     expired = {"Authorization": f"Bearer {token(expired=True)}", "Idempotency-Key": "abcdefgh"}
     assert client.post("/v1/questions", json={
         "text": "A sufficiently long research question here."}, headers=expired).status_code == 401
     assert client.post("/v1/questions", json={
         "text": "A sufficiently long research question here."},
-        headers={**auth(), "Idempotency-Key": "short"}).status_code == 400
+        headers={**auth(role="user"), "Idempotency-Key": "user-tier"}).status_code == 403
+    assert client.post("/v1/questions", json={
+        "text": "A sufficiently long research question here."},
+        headers={**auth(role="paid"), "Idempotency-Key": "short"}).status_code == 400
 
 
 @pytest.mark.spec("WEB-Q-001")
@@ -100,11 +103,11 @@ def test_moderation_rejects_missing_and_invalid_cluster_assignments(client):
 def test_domains_are_suggested_by_submitters_and_assigned_by_moderators(client, session_factory):
     unknown = client.post("/v1/questions", json={
         "text": "Does quantum annealing beat classical heuristics on scheduling problems?",
-        "domain": "physics"}, headers={**auth(), "Idempotency-Key": "unknown-domain"})
+        "domain": "physics"}, headers={**auth(role="paid"), "Idempotency-Key": "unknown-domain"})
     assert unknown.status_code == 422
     suggested = client.post("/v1/questions", json={
         "text": "Do fiscal multipliers differ between recessions and expansions?",
-        "domain": "economics"}, headers={**auth(), "Idempotency-Key": "suggested-domain"}).json()
+        "domain": "economics"}, headers={**auth(role="paid"), "Idempotency-Key": "suggested-domain"}).json()
     listed = client.get("/v1/admin/submissions", headers=auth("moderator-1", "moderator")).json()
     assert listed["submissions"][0]["suggested_domain_label"] == "Economics"
     kept = approve(client, suggested["submission_id"], domain=None).json()

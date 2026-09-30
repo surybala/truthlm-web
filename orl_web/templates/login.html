@@ -9,9 +9,9 @@
       <h1>Member sign in</h1>
       {% if access_mode == 'invite' %}
       <p>TruthLM is invite-only during early access. Use the email address your invitation was sent to. We will email you a one-time link, and there is no password.</p>
-      <p class="login-aside">Not a member yet? <a href="/join">Request an invitation</a>. Everything we publish can be read without an account.</p>
+      <p class="login-aside">Not approved yet? <a href="/join">Join the waitlist</a>. Everything we publish can be read without an account.</p>
       {% else %}
-      <p>Sign in to submit questions, upvote the ones you want investigated, follow moderation decisions, and build a personal research feed.</p>
+      <p>Sign in to manage article subscriptions. Researchers with private access can also submit questions and return to their research answers.</p>
       {% endif %}
     </div>
     <form id="login-form" class="login-form" data-next="{{ next_path }}">

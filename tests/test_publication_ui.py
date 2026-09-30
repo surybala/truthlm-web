@@ -20,24 +20,40 @@ from orl_web.models import Article, ArticleRevision
 def test_public_home_and_method_explain_transparent_research(client):
     home = client.get("/")
     assert home.status_code == 200
-    for expected in ("Questions before answers.", "Seven questions every investigation must answer",
-                     "What would change the conclusion?", "Students", "Researchers",
-                     "not a social network", "Request an invitation", 'id="join-form"',
-                     "Economics · Finance · Mathematics · Statistics"):
+    for expected in ("Questions before answers",
+                     "Provides thoughtful, scientifically grounded answers after expert review",
+                     "How TruthLM turns a question into grounded research", "Research director",
+                     "Domain expert", "Research library", "Grounded LLM synthesis",
+                     "Multi-round expert review", "Repeat until material issues are resolved",
+                     "Expert-reviewed answer",
+                     'aria-label="Pause animation"',
+                     "Join the waitlist", 'id="join-form"'):
         assert expected in home.text
+    for removed in ("Seven questions every investigation must answer", "Who it is for",
+                    "not a social network", "Read openly. Join when you are ready.",
+                    "Whitelisted account"):
+        assert removed not in home.text
     assert "TruthLM · A thought assistant for students and researchers" not in home.text
+    for removed_badge in (">RD<", ">D<", ">E<", ">Q<", ">AI<"):
+        assert removed_badge not in home.text
     assert 'href="/login">Sign in' in home.text and 'href="/questions"' not in home.text
     assert "frame-ancestors 'none'" in home.headers["content-security-policy"]
     assert home.headers["x-content-type-options"] == "nosniff"
-    hero = client.get("/static/images/truthlm-research-workspace.png")
+    hero = client.get("/static/images/truthlm-research-workspace-v2.png")
     assert hero.status_code == 200
     assert hero.headers["content-type"] == "image/png"
     assert "We would rather publish nothing" in home.text
+    archive = client.get("/research")
+    assert 'class="feed-link" href="/join"' in archive.text
+    assert "Subscribe to new research" in archive.text
+    assert '>RSS feed</a>' not in archive.text
     method = client.get("/method")
     assert method.status_code == 200
-    assert "reproducible record" in method.text and "hidden chain-of-thought" in method.text
+    assert "reproducible record" in method.text
+    assert "hidden chain-of-thought" not in method.text
+    assert "Reviewed by people, prioritized by members" not in method.text
     assert method.text.count('class="ask-yourself"') == 7
-    assert "answerable with a lookup or a calculator" in method.text
+    assert "answerable with a lookup or a calculator" not in method.text
 
 
 @pytest.mark.spec("WEB-PUB-001", "WEB-PUB-002", "WEB-PUB-004", "WEB-PUB-005", "WEB-UI-001", "WEB-SEC-002")
@@ -57,7 +73,10 @@ def test_publication_import_publish_archive_and_research_record(client):
     assert client.post("/v1/admin/publications/bundle-1/publish",
                        headers=auth("editor-1", "editor")).json()["idempotent_replay"]
 
-    assert "Does the effect" in client.get("/").text
+    home = client.get("/")
+    assert "Does the effect" in home.text
+    assert 'data-investigation-rail' in home.text
+    assert 'data-count="1"' in home.text
     archive = client.get("/research")
     assert "Does the effect hold outside" in archive.text
     assert "Does the effect" in client.get("/research?q=effect").text
@@ -72,6 +91,8 @@ def test_publication_import_publish_archive_and_research_record(client):
                      "cited papers"):
         assert expected in article.text
     assert "Ran search_library" not in article.text
+    assert "Connected evidence:" not in article.text
+    assert "View 2 connected evidence records" in article.text
     assert "&lt;script&gt;alert" in article.text and "<script>alert" not in article.text
     assert client.get("/v1/articles").json()["articles"][0]["slug"] == "does-the-effect-hold"
     assert client.get("/research/missing").status_code == 404

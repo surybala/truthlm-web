@@ -24,6 +24,7 @@ class Base(DeclarativeBase):
 
 class Role(str, enum.Enum):
     user = "user"
+    paid = "paid"
     moderator = "moderator"
     editor = "editor"
     admin = "admin"
@@ -139,6 +140,8 @@ class QuestionSubmission(Base):
     moderation_state: Mapped[ModerationState] = mapped_column(
         Enum(ModerationState, native_enum=False), nullable=False, default=ModerationState.pending)
     moderation_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 

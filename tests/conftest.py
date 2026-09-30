@@ -82,7 +82,7 @@ def auth(subject="user-1", role="user"):
 def submit(client, text="Does this treatment improve outcomes across diverse adult populations?",
            subject="user-1", key="submission-key-1"):
     return client.post("/v1/questions", json={"text": text},
-                       headers={**auth(subject), "Idempotency-Key": key})
+                       headers={**auth(subject, "paid"), "Idempotency-Key": key})
 
 
 def grant_access(client, email):

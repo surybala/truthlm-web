@@ -37,7 +37,7 @@ from .models import (AccessRequest, AccessStatus, Article, ArticleRevision, Audi
 from .presentation import bibliographic_references, research_journey, share_links
 from .schemas import (AccessDecision, AccessInvite, AccessRequestCreate, CycleCreate,
                       EditorialReason, FreezeRequest, ManualReadiness, ModerationDecision,
-                      MagicLinkRequest, QuestionCreate, QuestionReportCreate,
+                      MagicLinkRequest, PrivateAnswer, QuestionCreate, QuestionReportCreate,
                       QuestionReportResolution, ResearchSubscriptionCreate)
 
 
@@ -227,6 +227,7 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     admin = require_roles(current, Role.admin)
     service = require_roles(current, Role.service, Role.admin)
     publisher = require_roles(current, Role.editor, Role.admin, Role.service)
+    paid_researcher = require_roles(current, Role.paid, Role.editor, Role.admin)
 
     app = FastAPI(title="TruthLM API", version="0.1.0",
                   description="Public research, question, voting, and publishing service for ORL")
@@ -315,6 +316,8 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     def login_page(request: Request, next_path: str = Query(default="/questions", alias="next")):
         if getattr(request.state, "principal", None):
             return RedirectResponse(next_path if next_path.startswith("/") else "/questions", 303)
+        if settings.access_mode == "invite" and next_path == "/subscriptions":
+            return RedirectResponse("/join", 303)
         return templates.TemplateResponse(request, "login.html", {
             "next_path": next_path, "magic_link_minutes": settings.magic_link_minutes})
 
@@ -369,7 +372,8 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
         user = session.scalar(select(User).where(User.email == item.email))
         if user is None:
             role = Role.admin if item.email in settings.admin_emails else (
-                Role.editor if item.email in settings.editor_emails else Role.user)
+                Role.editor if item.email in settings.editor_emails else (
+                    Role.paid if item.email in settings.paid_emails else Role.user))
             user = User(external_subject=f"email:{item.email}", email=item.email, role=role)
             session.add(user)
             session.flush()
@@ -486,7 +490,8 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     @app.get("/subscriptions", response_class=HTMLResponse)
     def subscriptions_page(request: Request):
         if getattr(request.state, "principal", None) is None:
-            return RedirectResponse("/login?next=/subscriptions", status_code=303)
+            destination = "/join" if settings.access_mode == "invite" else "/login?next=/subscriptions"
+            return RedirectResponse(destination, status_code=303)
         return templates.TemplateResponse(request, "subscriptions.html", {
             "public_feed_url": f"{settings.base_url}/feeds/research.xml"})
 
@@ -642,11 +647,15 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request, session: Session = Depends(get_session)):
         articles = list(session.scalars(select(Article).where(Article.status == "published")
-                        .order_by(Article.published_at.desc()).limit(3)))
+                        .order_by(Article.published_at.desc())))
+        article_cards = [{"article": article,
+                          "domains": _article_facets(
+                              session, article, settings.domain_labels)["domains"]}
+                         for article in articles]
         metric = session.scalar(select(MetricsSnapshot).order_by(
             MetricsSnapshot.generated_at.desc(), MetricsSnapshot.snapshot_id.desc()).limit(1))
         return templates.TemplateResponse(request, "home.html", {
-            "articles": articles, "metrics": metric.payload if metric else None})
+            "article_cards": article_cards, "metrics": metric.payload if metric else None})
 
     @app.get("/research", response_class=HTMLResponse)
     def articles_page(request: Request, q: str = Query(default="", max_length=200),
@@ -694,10 +703,11 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
         return templates.TemplateResponse(request, "method.html", {})
 
     @app.get("/questions", response_class=HTMLResponse)
-    def questions_page(request: Request):
-        if getattr(request.state, "principal", None) is None:
+    def questions_page(request: Request, viewer: Principal | None = Depends(optional_current)):
+        if viewer is None:
             return RedirectResponse("/login?next=/questions", status_code=303)
-        return templates.TemplateResponse(request, "questions.html", {})
+        return templates.TemplateResponse(request, "questions.html", {
+            "paid_access": viewer.role in {Role.paid, Role.editor, Role.admin}})
 
     @app.get("/moderation", response_class=HTMLResponse)
     def moderation_console(request: Request):
@@ -714,7 +724,7 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
 
     @app.post("/v1/questions", status_code=201)
     def submit_question(body: QuestionCreate, idempotency_key: str = Header(alias="Idempotency-Key"),
-                        principal: Principal = Depends(any_user),
+                        principal: Principal = Depends(paid_researcher),
                         session: Session = Depends(get_session)) -> dict[str, Any]:
         if not 8 <= len(idempotency_key) <= 128:
             raise HTTPException(400, "Idempotency-Key must be 8 to 128 characters")
@@ -891,7 +901,22 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
             "moderation_state": item.moderation_state.value,
             "moderation_reason": item.moderation_reason if item.moderation_state != ModerationState.pending else "",
             "cluster_id": memberships.get(item.id), "created_at": _iso(item.created_at),
+            "answer": item.answer, "answered_at": _iso(item.answered_at) if item.answered_at else None,
         } for item in submissions]}
+
+    @app.put("/v1/admin/submissions/{submission_id}/answer")
+    def answer_private_question(submission_id: str, body: PrivateAnswer,
+                                principal: Principal = Depends(editor),
+                                session: Session = Depends(get_session)) -> dict[str, Any]:
+        actor = _user(session, principal)
+        submission = session.get(QuestionSubmission, submission_id)
+        if submission is None:
+            raise HTTPException(404, "submission not found")
+        submission.answer = body.answer.strip()
+        submission.answered_at = utcnow()
+        _audit(session, actor, "question.answered", "question_submission", submission.id)
+        session.commit()
+        return {"submission_id": submission.id, "answered_at": _iso(submission.answered_at)}
 
     @app.post("/v1/questions/{cluster_id}/report", status_code=201)
     def report_question(cluster_id: str, body: QuestionReportCreate,

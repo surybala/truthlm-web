@@ -29,7 +29,7 @@
 
 ## Publication and public experience
 
-- **WEB-UI-001** The public home, method, archive, and article pages shall present TruthLM as a thought assistant for students and researchers rather than a quick-answer service, present the research method as the questions an investigation asks, make published investigations browsable without authentication, and never show the members' question queue or vote counts to the public.
+- **WEB-UI-001** The public home, method, archive, and article pages shall present TruthLM as a thought assistant for students and researchers rather than a quick-answer service; the home page shall distinguish three simple access levels: open article reading, authenticated research subscriptions, and access-request based paid private research; the method shall present the questions an investigation asks; published investigations shall remain browsable without authentication; and the public shall never see the members' question queue or vote counts.
 - **WEB-UI-002** Published investigations shall be shareable without third-party scripts: every article page shall declare its canonical URL and Open Graph and Twitter card metadata and offer share links for common social networks and email, plus copy-link and native device sharing.
 - **WEB-UI-003** The reader view of every published investigation shall surface its open questions and material limitations beside the findings, so an article ends in further inquiry rather than a final verdict.
 - **WEB-PUB-001** Web shall idempotently accept a publication bundle as a draft only after schema, checksum, citation-reference, research-review, originality, copyright, citation-support, equation, and quantitative gates pass; editorial approval shall be a separate authenticated action.
@@ -158,6 +158,19 @@ tools, and users. Browser session cookies are never accepted as a substitute for
 credential. Feed polling updates `last_used_at` at most once per day to avoid a write on every poll.
 
 ## Positioning, membership, and domain design
+
+### V1 launch cohort
+
+V1 is a curated, invite-only launch for selected researchers. They establish the question queue with
+high-quality, researchable questions so the first public investigations demonstrate the product to
+prospective researchers. Every submission receives the same moderation, readiness, research, and
+editorial review and cannot bypass publication gates.
+
+The future product direction is a user-owned private investigation workspace with optional,
+explicit publication and metered asynchronous Core research. V1 does not expose direct Core access
+or yet promise that lifecycle. At launch, a member's submitted question remains private until
+moderation approves it into the member queue; only selected questions that complete research and
+editorial review become public investigations.
 
 ### Positioning
 

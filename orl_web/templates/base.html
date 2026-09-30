@@ -12,12 +12,12 @@
   <meta property="og:title" content="TruthLM — Questions before answers">
   <meta property="og:description" content="{{ default_description }}">
   <meta property="og:url" content="{{ base_url }}{{ request.url.path }}">
-  <meta property="og:image" content="{{ base_url }}/static/images/truthlm-research-workspace.png">
+  <meta property="og:image" content="{{ base_url }}/static/images/truthlm-research-workspace-v2.png">
   <meta name="twitter:card" content="summary_large_image">
   {% endblock %}
   <link rel="icon" href="{{ url_for('static', path='images/favicon.svg') }}" type="image/svg+xml">
   <link rel="alternate" type="application/rss+xml" title="TruthLM Research" href="/feeds/research.xml">
-  <link rel="stylesheet" href="{{ url_for('static', path='site.css') }}?v=20260927-3">
+  <link rel="stylesheet" href="{{ url_for('static', path='site.css') }}?v=20260929-3">
   <script defer src="{{ url_for('static', path='site.js') }}?v=20260927"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">
@@ -35,7 +35,7 @@
         <details class="account-menu">
           <summary aria-label="Open member menu">
             <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 21a8 8 0 0 0-16 0M12 13a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z"/></svg>
-            <span>Member</span>
+            <span>{{ 'Researcher' if viewer.role.value == 'paid' else 'Member' }}</span>
           </summary>
           <div class="account-popover">
             <p>{{ viewer.role.value | title }} access</p>
@@ -47,7 +47,7 @@
         </details>
         {% else %}
         <a class="header-signin" href="/login">Sign in</a>
-        {% if access_mode == 'invite' %}<a class="header-action" href="/join">Request access</a>{% endif %}
+        {% if access_mode == 'invite' %}<a class="header-action" href="/join">Join waitlist</a>{% endif %}
         {% endif %}
       </div>
     </div>
@@ -57,14 +57,13 @@
     <div class="footer-inner">
       <div class="footer-intro">
         <a class="brand footer-brand" href="/"><span class="brand-mark" aria-hidden="true"></span>TruthLM</a>
-        <p>A thought assistant, not an answer machine. Follow the evidence, inspect the method, and decide what you think.</p>
+        <p>Careful answers, with the research behind them.</p>
       </div>
       <div class="footer-links">
         <a href="/research">Investigations</a>
         <a href="/method">Research method</a>
-        {% if viewer %}<a href="/questions">Questions</a>{% elif access_mode == 'invite' %}<a href="/join">Request access</a>{% endif %}
-        <a href="/feeds/research.xml">RSS feed</a>
-        <a href="/docs">API</a>
+        {% if viewer %}<a href="/questions">Questions</a>{% elif access_mode == 'invite' %}<a href="/join">Join waitlist</a>{% endif %}
+        <a href="{% if viewer %}/subscriptions{% elif access_mode == 'invite' %}/join{% else %}/login?next=/subscriptions{% endif %}">Subscriptions</a>
       </div>
       <p class="footer-legal">Scientific analysis for learning and research, not medical, legal, or investment advice.</p>
     </div>

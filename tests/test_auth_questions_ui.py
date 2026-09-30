@@ -46,7 +46,7 @@ def test_magic_link_is_hashed_single_use_and_creates_revocable_csrf_session(
     assert client.post("/v1/questions", json=question,
                        headers={"Idempotency-Key": "browser-question-1"}).status_code == 403
     assert client.post("/v1/questions", json=question, headers={
-        "Idempotency-Key": "browser-question-1", "X-CSRF-Token": csrf}).status_code == 201
+        "Idempotency-Key": "browser-question-1", "X-CSRF-Token": csrf}).status_code == 403
     response = client.post("/v1/auth/logout", headers={"X-CSRF-Token": csrf})
     assert response.status_code == 204
     assert client.get("/v1/auth/session").json() == {"authenticated": False}
@@ -64,56 +64,32 @@ def test_magic_link_rate_limit_has_neutral_response(client, mailer, settings):
     assert len(mailer.deliveries) == settings.magic_link_limit_per_hour
 
 
-@pytest.mark.spec("WEB-Q-002", "WEB-Q-003", "WEB-Q-004", "WEB-VOTE-005")
-def test_signed_in_question_queue_tracks_history_votes_and_reports(
-        client, mailer, session_factory):
-    submitted = submit(client)
-    cluster_id = approve(client, submitted.json()["submission_id"]).json()["cluster_id"]
-    assert create_cycle(client).status_code == 201
-    _, csrf = sign_in(client, mailer)
+@pytest.mark.spec("WEB-Q-002", "WEB-Q-003", "WEB-Q-004")
+def test_paid_researcher_has_private_searchable_question_and_answer_workspace(client):
+    member_page = client.get("/questions", headers=auth("member", "user"))
+    assert member_page.status_code == 200
+    assert "Request private research" in member_page.text
+    assert "Submit private question" not in member_page.text
 
-    page = client.get("/questions")
-    assert page.status_code == 200
-    assert "Send for review" in page.text and "Review decisions" in page.text
-    assert "cannot be settled by a lookup" in page.text
+    paid_page = client.get("/questions", headers=auth("researcher", "paid"))
+    assert paid_page.status_code == 200
+    for copy in ("Submit private question", "Questions and answers", "Search your research"):
+        assert copy in paid_page.text
+    for removed in ("Upvote", "ranked by", "Flag this question", "Send for review"):
+        assert removed not in paid_page.text
+
     created = client.post("/v1/questions", json={
         "text": "How stable is this reported effect across preregistered replications?",
         "domain": "statistics"
-    }, headers={"Idempotency-Key": "signed-in-question", "X-CSRF-Token": csrf})
+    }, headers={**auth("researcher", "paid"), "Idempotency-Key": "private-question"})
     assert created.status_code == 201
-    history = client.get("/v1/me/submissions").json()["submissions"]
-    assert history[0]["moderation_state"] == "pending"
-    assert history[0]["text"].startswith("How stable")
-    pending = client.get("/v1/admin/submissions", headers=auth("moderator-2", "moderator"))
-    assert created.json()["submission_id"] in {
-        item["submission_id"] for item in pending.json()["submissions"]}
-
-    assert client.put(f"/v1/questions/{cluster_id}/vote",
-                      headers={"X-CSRF-Token": csrf}).status_code == 200
-    queue = client.get("/v1/questions").json()
-    assert queue["cycle"]["key"] == "2026-W40"
-    assert queue["questions"][0]["viewer_has_voted"] is True
-
-    body = {"reason": "misleading", "details": "The framing may imply a causal result."}
-    first = client.post(f"/v1/questions/{cluster_id}/report", json=body,
-                        headers={"X-CSRF-Token": csrf})
-    replay = client.post(f"/v1/questions/{cluster_id}/report", json=body,
-                         headers={"X-CSRF-Token": csrf})
-    assert first.status_code == 201 and replay.json()["idempotent_replay"] is True
-    moderator_headers = auth("moderator-2", "moderator")
-    reports = client.get("/v1/admin/question-reports", headers=moderator_headers).json()["reports"]
-    assert reports[0]["report_id"] == first.json()["report_id"]
-    resolved = client.post(f"/v1/admin/question-reports/{first.json()['report_id']}/resolve",
-                           json={"status": "dismissed", "reason": "Framing is within policy."},
-                           headers=moderator_headers)
-    assert resolved.json()["status"] == "dismissed"
-    assert client.post(f"/v1/admin/question-reports/{first.json()['report_id']}/resolve",
-                       json={"status": "resolved", "reason": "A later duplicate decision."},
-                       headers=moderator_headers).json()["idempotent_replay"] is True
-    with session_factory() as session:
-        assert session.scalar(select(func.count()).select_from(QuestionReport)) == 1
-        assert session.scalar(select(func.count()).select_from(AuditEvent).where(
-            AuditEvent.action == "question.reported")) == 1
+    answered = client.put(f"/v1/admin/submissions/{created.json()['submission_id']}/answer",
+                          json={"answer": "The effect remains uncertain across the available replications."},
+                          headers=auth("owner", "editor"))
+    assert answered.status_code == 200
+    history = client.get("/v1/me/submissions", headers=auth("researcher", "paid")).json()["submissions"]
+    assert history[0]["answer"].startswith("The effect remains uncertain")
+    assert history[0]["answered_at"] is not None
 
 
 @pytest.mark.spec("WEB-Q-002", "WEB-UI-001")
