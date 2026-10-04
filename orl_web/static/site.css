@@ -358,9 +358,13 @@ h1, h2, h3 { line-height: 1.08; letter-spacing: 0; }
 .private-answer-copy { margin-top: 20px; padding: 20px; border-left: 3px solid var(--cyan); background: var(--wash); }
 .private-answer-copy p:last-child { margin: 8px 0 0; white-space: pre-wrap; }
 .paid-gate { max-width: 760px; padding: 72px 0 100px; }
+.paid-gate-kicker { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+.paid-gate-kicker .eyebrow { margin: 0; }
+.coming-soon-tag { display: inline-flex; min-height: 26px; align-items: center; padding: 0 9px; border: 1px solid #d8b547; border-radius: 999px; background: #fff5cf; color: #66500b; font-size: 11px; font-weight: 800; text-transform: uppercase; }
 .paid-gate h2 { max-width: 680px; font-size: 42px; }
 .paid-gate > p:not(.eyebrow) { max-width: 650px; color: var(--muted); font-size: 18px; }
-.paid-gate .button { display: inline-block; margin-top: 16px; }
+.paid-gate .button { width: fit-content; display: inline-flex; align-items: center; justify-content: center; margin-top: 16px; }
+.paid-gate .button:disabled { opacity: .58; cursor: not-allowed; transform: none; }
 .submission-history h2 { font-family: Georgia, serif; font-size: 27px; font-weight: 500; }
 .history-row { display: grid; grid-template-columns: auto 1fr; gap: 8px 10px; padding: 15px 0; border-bottom: 1px solid var(--line); }
 .history-row p { grid-column: 1 / -1; margin: 0; font-size: 13px; }

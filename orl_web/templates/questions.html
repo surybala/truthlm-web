@@ -4,7 +4,7 @@
 {% block content %}
 <header class="page-header queue-header">
   <div class="section-inner queue-heading">
-    <div><p class="eyebrow light">Private research</p><h1>Your questions, researched carefully.</h1></div>
+    <div><p class="eyebrow light">Private research</p><h1>Private research questions</h1></div>
     <p>Researchers with private access can submit questions and return to the resulting answers at any time. Your questions and answers remain private to your account and the TruthLM research team.</p>
   </div>
 </header>
@@ -32,10 +32,13 @@
   </div>
   {% else %}
   <div class="section-inner paid-gate">
-    <p class="eyebrow">Private research access</p>
+    <div class="paid-gate-kicker">
+      <p class="eyebrow">Private research access</p>
+      <span class="coming-soon-tag">Coming soon</span>
+    </div>
     <h2>Commission research for questions that matter to your work.</h2>
-    <p>Your whitelisted account includes topic subscriptions. Private questions are available as a paid research service, with every answer kept in your searchable research library.</p>
-    <a class="button dark" href="/#join">Request private research</a>
+    <p>Your whitelisted account includes topic subscriptions. Private questions will be available as a paid research service, with every answer kept in your searchable research library.</p>
+    <button class="button dark" type="button" disabled>Request private research</button>
   </div>
   {% endif %}
 </section>

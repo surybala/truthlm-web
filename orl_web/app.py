@@ -55,6 +55,18 @@ def _parse_time(value: str) -> datetime:
     return datetime.fromisoformat(value.replace("Z", "+00:00"))
 
 
+def _local_redirect_path(value: str, fallback: str = "/questions") -> str:
+    try:
+        parsed = urlsplit(value)
+    except ValueError:
+        return fallback
+    unsafe_chars = any(ord(char) < 32 or ord(char) == 127 for char in value)
+    if (not value.startswith("/") or parsed.scheme or parsed.netloc
+            or "\\" in value or unsafe_chars):
+        return fallback
+    return value
+
+
 def _user(session: Session, principal: Principal) -> User:
     if principal.user_id:
         user = session.get(User, principal.user_id)
@@ -314,8 +326,9 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
 
     @app.get("/login", response_class=HTMLResponse)
     def login_page(request: Request, next_path: str = Query(default="/questions", alias="next")):
+        next_path = _local_redirect_path(next_path)
         if getattr(request.state, "principal", None):
-            return RedirectResponse(next_path if next_path.startswith("/") else "/questions", 303)
+            return RedirectResponse(next_path, 303)
         if settings.access_mode == "invite" and next_path == "/subscriptions":
             return RedirectResponse("/join", 303)
         return templates.TemplateResponse(request, "login.html", {
@@ -350,8 +363,7 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     def verify_magic_link(request: Request, token: str = Query(min_length=20, max_length=200),
                           next_path: str = Query(default="/questions", alias="next", max_length=300),
                           session: Session = Depends(get_session)):
-        if not next_path.startswith("/") or next_path.startswith("//"):
-            next_path = "/questions"
+        next_path = _local_redirect_path(next_path)
         item = session.scalar(select(MagicLinkToken).where(
             MagicLinkToken.token_hash == token_hash(token)).with_for_update())
         now = utcnow()

@@ -49,6 +49,8 @@ def test_public_home_and_method_explain_transparent_research(client):
     assert '>RSS feed</a>' not in archive.text
     method = client.get("/method")
     assert method.status_code == 200
+    assert "A method is a set of questions you refuse to skip</h1>" in method.text
+    assert "A method is a set of questions you refuse to skip.</h1>" not in method.text
     assert "reproducible record" in method.text
     assert "hidden chain-of-thought" not in method.text
     assert "Reviewed by people, prioritized by members" not in method.text

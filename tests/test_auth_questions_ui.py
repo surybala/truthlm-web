@@ -30,6 +30,12 @@ def sign_in(client, mailer, email="reader@example.org"):
 def test_magic_link_is_hashed_single_use_and_creates_revocable_csrf_session(
         client, mailer, session_factory):
     token, csrf = sign_in(client, mailer)
+    redirected = client.get("/login?next=//evil.example/path", follow_redirects=False)
+    assert redirected.status_code == 303 and redirected.headers["location"] == "/questions"
+    backslash = client.get("/login?next=/%5Cevil.example/path", follow_redirects=False)
+    assert backslash.status_code == 303 and backslash.headers["location"] == "/questions"
+    safe = client.get("/login?next=/questions", follow_redirects=False)
+    assert safe.status_code == 303 and safe.headers["location"] == "/questions"
     cookie = client.cookies.get("truthlm_session")
     assert cookie and token not in cookie and csrf
     with session_factory() as session:
@@ -68,7 +74,11 @@ def test_magic_link_rate_limit_has_neutral_response(client, mailer, settings):
 def test_paid_researcher_has_private_searchable_question_and_answer_workspace(client):
     member_page = client.get("/questions", headers=auth("member", "user"))
     assert member_page.status_code == 200
+    assert "Private research questions</h1>" in member_page.text
+    assert "Your questions, researched carefully." not in member_page.text
     assert "Request private research" in member_page.text
+    assert "Coming soon" in member_page.text
+    assert "Private questions will be available as a paid research service" in member_page.text
     assert "Submit private question" not in member_page.text
 
     paid_page = client.get("/questions", headers=auth("researcher", "paid"))
