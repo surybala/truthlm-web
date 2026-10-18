@@ -13,7 +13,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const DECLINE_REASONS = [
     "This has a direct answer that a lookup, definition, or calculator can give. TruthLM is for questions that need an investigation.",
     "Please narrow the question: name the population, setting, or time frame so the evidence can answer it.",
-    "A very similar question is already open. Please upvote that one instead.",
+    "A very similar question is already open. Attach to it instead.",
     "This falls outside the domains TruthLM currently covers.",
     "This question is not appropriate for TruthLM.",
   ];
@@ -108,23 +108,23 @@ document.addEventListener("DOMContentLoaded", () => {
         if (domain.value) body.domain = domain.value;
         body.tags = tags.value.split(",").map((tag) => tag.trim()).filter(Boolean);
       }
-      await api(`/v1/admin/submissions/${encodeURIComponent(item.submission_id)}/moderate`,
-                {method: "POST", body: JSON.stringify(body)});
+      const result = await api(`/v1/admin/submissions/${encodeURIComponent(item.submission_id)}/moderate`,
+                               {method: "POST", body: JSON.stringify(body)});
       await loadPending();
-      return "Question approved. Members can now see and upvote it.";
+      return `Question approved as cluster ${result.cluster_id}. Pass this ID to the Core run.`;
     }));
     const decline = el("button", {type: "button", className: "button reject", text: "Decline with reason"});
     decline.addEventListener("click", () => act(decline, async () => {
       await api(`/v1/admin/submissions/${encodeURIComponent(item.submission_id)}/moderate`,
                 {method: "POST", body: JSON.stringify({action: "reject", reason: declineReason.value.trim()})});
       await loadPending();
-      return "Question declined. The member will see your reason.";
+      return "Question declined. The submitter will see your reason.";
     }));
 
     card.appendChild(el("div", {className: "review-columns"}, [
       el("div", {className: "review-approve"}, [
         el("h3", {text: "Approve"}),
-        labelled("Wording members will see", canonical),
+        labelled("Wording to investigate", canonical),
         labelled("Domain", domain),
         labelled("Tags", tags),
         labelled("Or attach to an open question", attach),
@@ -134,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
       el("div", {className: "review-decline"}, [
         el("h3", {text: "Decline"}),
         labelled("Reason", declinePreset),
-        labelled("Message to the member", declineReason),
+        labelled("Message to the submitter", declineReason),
         decline,
       ]),
     ]));
@@ -178,8 +178,8 @@ document.addEventListener("DOMContentLoaded", () => {
   };
 
   const ACCESS_ACTIONS = {
-    pending: [["approve", "Approve", "Approved for early access."], ["decline", "Decline", "Not in the current cohort."]],
-    declined: [["approve", "Approve", "Approved for early access."]],
+    pending: [["approve", "Approve", "Subscription opened."], ["decline", "Decline", "Not in the current batch."]],
+    declined: [["approve", "Approve", "Subscription opened."]],
     revoked: [["approve", "Restore access", "Access restored."]],
     approved: [["revoke", "Revoke access", "Access revoked."]],
   };
@@ -209,7 +209,7 @@ document.addEventListener("DOMContentLoaded", () => {
                                      {method: "POST", body: JSON.stringify({action, reason: reason.value.trim()})});
             await loadAccess();
             if (action !== "approve") return `Access ${result.status}.`;
-            return result.notified ? "Approved. An invitation email is on its way." : "Approved, but the invitation email could not be sent. Let them know directly.";
+            return result.notified ? "Approved. The subscription is active and a welcome email is on its way." : "Approved and subscribed, but the welcome email could not be sent. Let them know directly.";
           }));
           controls.appendChild(button);
         });
@@ -219,80 +219,6 @@ document.addEventListener("DOMContentLoaded", () => {
       accessList.appendChild(card);
     });
     if (!payload.requests.length) empty(accessList, "Nothing to show here.");
-  };
-
-  const isoWeekKey = (value) => {
-    const day = new Date(Date.UTC(value.getFullYear(), value.getMonth(), value.getDate()));
-    day.setUTCDate(day.getUTCDate() + 4 - (day.getUTCDay() || 7));
-    const yearStart = new Date(Date.UTC(day.getUTCFullYear(), 0, 1));
-    const week = Math.ceil(((day - yearStart) / 86400000 + 1) / 7);
-    return `${day.getUTCFullYear()}-W${String(week).padStart(2, "0")}`;
-  };
-
-  const loadCycle = async () => {
-    const [cyclesPayload, queue] = await Promise.all([api("/v1/admin/cycles"), loadQueueContext()]);
-    const state = document.getElementById("cycle-state");
-    const standings = document.getElementById("cycle-standings");
-    const historyList = document.getElementById("cycle-history");
-    [state, standings, historyList].forEach((node) => node.replaceChildren());
-    const open = cyclesPayload.cycles.find((cycle) => cycle.state === "open");
-    if (open) {
-      state.appendChild(el("p", {className: "cycle-summary",
-        text: `Week ${open.cycle} is open for upvoting until ${new Date(open.ends_at).toLocaleString()}.`}));
-      const overrides = [];
-      domains.concat(queue.domains.filter((item) => item.key === "unassigned")).forEach((group) => {
-        const items = openQuestions.filter((item) => item.domain === group.key).sort((a, b) => a.rank - b.rank);
-        if (!items.length) return;
-        const section = el("section", {className: "standing"});
-        section.appendChild(el("h3", {text: group.label}));
-        const list = el("ol");
-        items.slice(0, 5).forEach((item) => list.appendChild(el("li", {text: `${item.question} (${item.votes} upvote${item.votes === 1 ? "" : "s"})`})));
-        section.appendChild(list);
-        const override = el("select", {}, [option("", items[0].votes >= 1 ? "Select the leader (default)" : "No selection: nothing has an upvote")]);
-        items.forEach((item) => override.appendChild(option(item.cluster_id, `Override: ${item.question}`)));
-        overrides.push(override);
-        section.appendChild(labelled("Selection", override));
-        standings.appendChild(section);
-      });
-      if (!standings.children.length) standings.appendChild(el("p", {className: "review-empty", text: "No approved questions are open."}));
-      const reason = el("input", {maxlength: "1000"});
-      reason.value = `Weekly upvoting closed for ${open.cycle}.`;
-      const freeze = el("button", {type: "button", className: "button dark", text: "Close upvoting and select"});
-      freeze.addEventListener("click", () => act(freeze, async () => {
-        const result = await api(`/v1/admin/cycles/${encodeURIComponent(open.cycle)}/freeze`, {method: "POST",
-          body: JSON.stringify({reason: reason.value.trim(), override_cluster_ids: overrides.map((item) => item.value).filter(Boolean)})});
-        await loadCycle();
-        return `Week ${result.cycle} closed with ${result.winners.length} selected question${result.winners.length === 1 ? "" : "s"}.`;
-      }));
-      standings.appendChild(el("article", {className: "review-actions freeze-actions"}, [labelled("Reason (public audit trail)", reason), freeze]));
-    } else {
-      const now = new Date();
-      const key = el("input", {pattern: "[0-9]{4}-W[0-9]{2}", maxlength: "8"});
-      key.value = isoWeekKey(now);
-      const ends = el("input", {type: "date"});
-      ends.value = new Date(now.getTime() + 7 * 86400000).toISOString().slice(0, 10);
-      const start = el("button", {type: "button", className: "button dark", text: "Open upvoting"});
-      start.addEventListener("click", () => act(start, async () => {
-        const result = await api("/v1/admin/cycles", {method: "POST", body: JSON.stringify({
-          cycle_key: key.value.trim(), starts_at: new Date().toISOString(),
-          ends_at: new Date(`${ends.value}T23:59:59`).toISOString()})});
-        await loadCycle();
-        return result.idempotent_replay ? `Week ${result.cycle_key} already exists (${result.state}). Choose another week key.` : `Week ${result.cycle_key} is open for upvoting.`;
-      }));
-      state.appendChild(el("article", {className: "review-card open-cycle"}, [
-        el("p", {className: "cycle-summary", text: "No cycle is open, so members cannot upvote."}),
-        labelled("Week key", key), labelled("Upvoting closes at the end of", ends),
-        el("div", {className: "review-actions"}, [start])]));
-    }
-    cyclesPayload.cycles.filter((cycle) => cycle.state === "frozen").forEach((cycle) => {
-      const card = el("article", {className: "review-card"});
-      card.appendChild(el("p", {className: "review-meta", text: `Week ${cycle.cycle} · closed ${date(cycle.frozen_at)} · ${cycle.selection_reason}`}));
-      const list = el("ul");
-      cycle.winners.forEach((winner) => list.appendChild(el("li", {text: `${winner.domain_label}: ${winner.question} (${winner.votes} upvote${winner.votes === 1 ? "" : "s"}${winner.override ? ", override" : ""})`})));
-      if (!cycle.winners.length) list.appendChild(el("li", {text: "No question was selected."}));
-      card.appendChild(list);
-      historyList.appendChild(card);
-    });
   };
 
   document.getElementById("invite-form")?.addEventListener("submit", async (event) => {
@@ -306,20 +232,19 @@ document.addEventListener("DOMContentLoaded", () => {
         name: document.getElementById("invite-name").value.trim(),
         reason: document.getElementById("invite-reason").value.trim()})});
       form.reset();
-      document.getElementById("invite-reason").value = "Invited to the early-access cohort.";
-      status.textContent = result.idempotent_replay ? `${result.email} is already a member.`
-        : result.notified ? `${result.email} is invited and has been emailed.` : `${result.email} is invited, but the email could not be sent.`;
+      document.getElementById("invite-reason").value = "Invited to subscribe.";
+      status.textContent = result.idempotent_replay ? `${result.email} is already a subscriber.`
+        : result.notified ? `${result.email} is subscribed and has been emailed.` : `${result.email} is subscribed, but the welcome email could not be sent.`;
       await loadAccess();
     } catch (error) {
       status.textContent = error.message;
     } finally { button.disabled = false; }
   });
   accessStatus?.addEventListener("change", () => loadAccess().catch((error) => { status.textContent = error.message; }));
-  document.getElementById("cycle-tab")?.addEventListener("click", () => loadCycle().catch((error) => { status.textContent = error.message; }));
 
   fetch("/v1/auth/session").then((response) => response.json()).then(async (identity) => {
     csrfToken = identity.csrf_token || "";
-    await Promise.all([loadPending(), loadFlags(), ...(isAdmin ? [loadAccess(), loadCycle()] : [])]);
+    await Promise.all([loadPending(), loadFlags(), ...(isAdmin ? [loadAccess()] : [])]);
     status.textContent = "Review queue is up to date.";
   }).catch((error) => {
     status.textContent = `Unable to load the review console: ${error.message}`;

@@ -1,17 +1,17 @@
 {% extends "base.html" %}
-{% block title %}Member sign in — TruthLM{% endblock %}
+{% block title %}Sign in — TruthLM{% endblock %}
 {% block body_class %}login-page{% endblock %}
 {% block content %}
 <section class="login-band">
   <div class="login-layout">
     <div>
-      <p class="eyebrow">TruthLM membership</p>
-      <h1>Member sign in</h1>
+      <p class="eyebrow">TruthLM subscription</p>
+      <h1>Subscriber sign in</h1>
       {% if access_mode == 'invite' %}
-      <p>TruthLM is invite-only during early access. Use the email address your invitation was sent to. We will email you a one-time link, and there is no password.</p>
+      <p>Subscriptions open gradually from the waitlist. Use the email address your invitation was sent to. We will email you a one-time link, and there is no password.</p>
       <p class="login-aside">Not approved yet? <a href="/join">Join the waitlist</a>. Everything we publish can be read without an account.</p>
       {% else %}
-      <p>Sign in to manage article subscriptions. Researchers with private access can also submit questions and return to their research answers.</p>
+      <p>Sign in with your email address to manage your subscription and the research domains you follow. We will email you a one-time link, and there is no password.</p>
       {% endif %}
     </div>
     <form id="login-form" class="login-form" data-next="{{ next_path }}">

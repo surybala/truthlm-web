@@ -13,6 +13,17 @@
   <div class="section-inner">
     {% if authorized %}
     <div class="editor-session"><p><strong>Authenticated editorial session</strong></p><p id="editor-status" role="status">Loading the review queue...</p></div>
+    <section id="delivery-panel" class="delivery-panel" aria-labelledby="delivery-title">
+      <div>
+        <p class="eyebrow">Subscribers</p>
+        <h2 id="delivery-title">Email delivery</h2>
+        <p>Publishing never emails anyone by itself. After publishing the week's investigations, send them in one email: each subscriber receives only new work that matches their interests, and never the same investigation twice.</p>
+      </div>
+      <div>
+        <dl id="delivery-status" class="delivery-status"><div><dt>Status</dt><dd>Loading...</dd></div></dl>
+        <button id="delivery-run" class="button dark" type="button">Email new research to subscribers</button>
+      </div>
+    </section>
     <div class="editor-workspace" id="editor-workspace">
       <aside><p class="eyebrow">Publication revisions</p><div id="editor-queue" class="editor-queue"></div></aside>
       <section id="editor-detail" class="editor-detail"><p>Select a revision to inspect its research record.</p></section>

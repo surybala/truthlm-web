@@ -5,11 +5,18 @@
 <header class="page-header subscriptions-header">
   <div class="section-inner subscriptions-heading">
     <div><p class="eyebrow light">Research subscriptions</p><h1>Follow the work that matters to you.</h1></div>
-    <p>You are signed in. Subscribe to all public articles, or build a personal feed around scientific domains and researchers cited in published work.</p>
+    <p>New investigations arrive by email. Follow all weekly research or narrow it to scientific domains and researchers cited in published work; the same choices drive your email and your personal RSS feed.</p>
   </div>
 </header>
 <section class="subscriptions-band">
   <div class="section-inner subscriptions-layout">
+    <section class="feed-section email-section" aria-labelledby="email-title">
+      <p class="eyebrow">Your inbox</p>
+      <h2 id="email-title">Email delivery</h2>
+      <p id="email-state">Checking your email delivery...</p>
+      <div class="email-actions"><button id="email-toggle" class="button dark" type="button" hidden>Stop research emails</button></div>
+    </section>
+
     <section class="feed-section" aria-labelledby="public-feed-title">
       <p class="eyebrow">Every investigation</p>
       <h2 id="public-feed-title">Weekly TruthLM research</h2>
@@ -21,9 +28,9 @@
     </section>
 
     <section class="feed-section personal-feed-section" aria-labelledby="personal-feed-title">
-      <p class="eyebrow">Your signed-in subscriptions</p>
+      <p class="eyebrow">Your interests</p>
       <h2 id="personal-feed-title">Personal research feed</h2>
-      <p>Select any combination. A publication appears once when it matches at least one interest.</p>
+      <p>Select any combination. A publication reaches your email and personal feed once when it matches at least one interest.</p>
       <div id="subscription-status" class="subscription-status" role="status">Loading your subscriptions...</div>
       <div class="selected-subscriptions">
         <h3>Following</h3>

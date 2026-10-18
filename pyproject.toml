@@ -1,7 +1,7 @@
 [project]
 name = "orl-web"
 version = "0.1.0"
-description = "Independent public question, voting, and publishing service for Open Research Lab"
+description = "Independent research publishing and email subscription service for Open Research Lab"
 requires-python = ">=3.11"
 dependencies = [
     "alembic>=1.14,<2",

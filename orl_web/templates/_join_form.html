@@ -16,6 +16,6 @@
   </div>
   <label for="join-note"><span>What question are you trying to think through? <small>(optional)</small></span><textarea id="join-note" name="note" maxlength="1000" rows="3"></textarea></label>
   <button class="button dark" type="submit">{{ join_submit_label | default("Join the waitlist") }}</button>
-  <p id="join-status" class="form-status" role="status">We use your email only to reply and to let you sign in. We never share it or show it to other members.</p>
+  <p id="join-status" class="form-status" role="status">We use your email only to send TruthLM research and sign-in links. We never share it or show it to anyone.</p>
 </form>
 <script defer src="{{ url_for('static', path='join.js') }}"></script>

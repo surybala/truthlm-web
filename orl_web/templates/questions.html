@@ -1,46 +1,41 @@
 {% extends "base.html" %}
-{% block title %}Private research — TruthLM{% endblock %}
+{% block title %}Research questions — TruthLM{% endblock %}
 {% block body_class %}queue-page{% endblock %}
 {% block content %}
 <header class="page-header queue-header">
   <div class="section-inner queue-heading">
-    <div><p class="eyebrow light">Private research</p><h1>Private research questions</h1></div>
-    <p>Researchers with private access can submit questions and return to the resulting answers at any time. Your questions and answers remain private to your account and the TruthLM research team.</p>
+    <div><p class="eyebrow light">Editorial workspace</p><h1>Research questions</h1></div>
+    <p>Propose the questions TruthLM investigates. A moderator approves the wording and domain in the review console; the approved question's cluster ID goes into the Core run so the investigation reaches the right subscribers.</p>
   </div>
 </header>
 <section class="queue-band">
-  {% if paid_access %}
-  <div class="section-inner private-research-shell">
-    <form id="question-form" class="question-form private-question-form">
-      <p class="eyebrow">New research question</p>
-      <h2>What would you like us to investigate?</h2>
+  <div class="section-inner question-workspace">
+    <form id="question-form" class="question-form workspace-form">
+      <p class="eyebrow">New question</p>
+      <h2>Submit a research question</h2>
       <label for="question-text">Research question</label>
-      <textarea id="question-text" maxlength="2000" minlength="20" rows="7" required placeholder="Describe the question, relevant context, population, time frame, and what would make the answer useful."></textarea>
-      <label for="question-domain">Subject</label>
-      <select id="question-domain"><option value="">Choose automatically</option>{% for key, label in domain_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
-      <button class="button dark" type="submit">Submit private question</button>
-      <p id="question-form-status" class="form-status" role="status">Only you and the TruthLM research team can view this question.</p>
+      <textarea id="question-text" maxlength="2000" minlength="20" rows="7" required placeholder="State the population, outcome, time frame, and what would make the answer useful."></textarea>
+      <label for="question-domain">Research domain</label>
+      <select id="question-domain"><option value="">Suggest no domain</option>{% for key, label in domain_labels.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select>
+      <button class="button dark" type="submit">Submit for review</button>
+      <p id="question-form-status" class="form-status" role="status">Submitted questions wait for approval in the <a href="/moderation">review console</a>.</p>
     </form>
-    <section class="private-history" aria-labelledby="history-title">
-      <div class="private-history-heading">
-        <div><p class="eyebrow">Your research library</p><h2 id="history-title">Questions and answers</h2></div>
-        <label class="queue-search" for="question-search"><span>Search your research</span><input id="question-search" type="search" placeholder="Search questions and answers"></label>
-      </div>
-      <div class="cycle-line"><strong>Private to your account</strong><span id="queue-count"></span></div>
-      <div id="submission-history" class="private-answer-list" aria-live="polite"><p class="loading-line">Loading your research...</p></div>
-    </section>
-  </div>
-  {% else %}
-  <div class="section-inner paid-gate">
-    <div class="paid-gate-kicker">
-      <p class="eyebrow">Private research access</p>
-      <span class="coming-soon-tag">Coming soon</span>
+    <div class="workspace-lists">
+      <section aria-labelledby="approved-title">
+        <div class="workspace-heading">
+          <div><p class="eyebrow">Ready for research</p><h2 id="approved-title">Approved questions</h2></div>
+          <span id="approved-count" class="form-status"></span>
+        </div>
+        <div id="approved-questions" class="workspace-list" aria-live="polite"><p class="loading-line">Loading approved questions...</p></div>
+      </section>
+      <section aria-labelledby="history-title">
+        <div class="workspace-heading">
+          <div><p class="eyebrow">Moderation</p><h2 id="history-title">Your submissions</h2></div>
+        </div>
+        <div id="submission-history" class="workspace-list" aria-live="polite"><p class="loading-line">Loading your submissions...</p></div>
+      </section>
     </div>
-    <h2>Commission research for questions that matter to your work.</h2>
-    <p>Your whitelisted account includes topic subscriptions. Private questions will be available as a paid research service, with every answer kept in your searchable research library.</p>
-    <button class="button dark" type="button" disabled>Request private research</button>
   </div>
-  {% endif %}
 </section>
-{% if paid_access %}<script defer src="{{ url_for('static', path='questions.js') }}?v=20260928-2"></script>{% endif %}
+<script defer src="{{ url_for('static', path='questions.js') }}?v=20261004"></script>
 {% endblock %}

@@ -11,7 +11,8 @@ from dotenv import load_dotenv
 
 
 _DEV_SECRET = "development-only-secret-change-me"
-_DEFAULT_DOMAINS = ("Economics", "Finance", "Mathematics", "Statistics")
+_DEFAULT_DOMAINS = ("Biology", "Chemistry", "Economics", "Finance", "Mathematics", "Physics",
+                    "Statistics")
 ACCESS_MODES = frozenset({"invite", "open"})
 UNASSIGNED_DOMAIN = "unassigned"
 # orl-web/.env for a source checkout; an installed package (the container image) has none.
@@ -38,10 +39,10 @@ class Settings:
     jwt_issuer: str = "orl-auth"
     jwt_audience: str = "orl-web"
     question_limit_per_hour: int = 5
-    vote_limit_per_hour: int = 60
     report_limit_per_hour: int = 10
     magic_link_limit_per_hour: int = 5
     access_request_limit_per_hour: int = 60
+    delivery_batch_size: int = 50
     access_mode: str = "invite"
     domains: tuple[str, ...] = _DEFAULT_DOMAINS
     base_url: str = "http://127.0.0.1:8080"
@@ -57,7 +58,6 @@ class Settings:
     smtp_starttls: bool = True
     admin_emails: tuple[str, ...] = ()
     editor_emails: tuple[str, ...] = ()
-    paid_emails: tuple[str, ...] = ()
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -69,11 +69,11 @@ class Settings:
             jwt_issuer=os.environ.get("ORL_WEB_JWT_ISSUER", "orl-auth"),
             jwt_audience=os.environ.get("ORL_WEB_JWT_AUDIENCE", "orl-web"),
             question_limit_per_hour=int(os.environ.get("ORL_WEB_QUESTION_LIMIT_PER_HOUR", "5")),
-            vote_limit_per_hour=int(os.environ.get("ORL_WEB_VOTE_LIMIT_PER_HOUR", "60")),
             report_limit_per_hour=int(os.environ.get("ORL_WEB_REPORT_LIMIT_PER_HOUR", "10")),
             magic_link_limit_per_hour=int(os.environ.get("ORL_WEB_MAGIC_LINK_LIMIT_PER_HOUR", "5")),
             access_request_limit_per_hour=int(os.environ.get(
                 "ORL_WEB_ACCESS_REQUEST_LIMIT_PER_HOUR", "60")),
+            delivery_batch_size=int(os.environ.get("ORL_WEB_DELIVERY_BATCH_SIZE", "50")),
             access_mode=os.environ.get("ORL_WEB_ACCESS_MODE", "invite").strip().lower(),
             domains=_labels("ORL_WEB_DOMAINS") or _DEFAULT_DOMAINS,
             base_url=os.environ.get("ORL_WEB_BASE_URL", "http://127.0.0.1:8080").rstrip("/"),
@@ -89,7 +89,6 @@ class Settings:
             smtp_starttls=os.environ.get("ORL_WEB_SMTP_STARTTLS", "true").lower() in {"1", "true", "yes"},
             admin_emails=_emails("ORL_WEB_ADMIN_EMAILS"),
             editor_emails=_emails("ORL_WEB_EDITOR_EMAILS"),
-            paid_emails=_emails("ORL_WEB_PAID_EMAILS"),
         )
         settings.validate()
         return settings
@@ -116,10 +115,11 @@ class Settings:
         if not keys or not all(keys) or len(set(keys)) != len(keys) or \
                 UNASSIGNED_DOMAIN in keys or max(map(len, keys)) > 64:
             raise ValueError("domains must be distinct non-empty labels")
-        if min(self.question_limit_per_hour, self.vote_limit_per_hour,
-               self.report_limit_per_hour, self.magic_link_limit_per_hour,
-               self.access_request_limit_per_hour) < 1:
+        if min(self.question_limit_per_hour, self.report_limit_per_hour,
+               self.magic_link_limit_per_hour, self.access_request_limit_per_hour) < 1:
             raise ValueError("rate limits must be positive")
+        if not 1 <= self.delivery_batch_size <= 1000:
+            raise ValueError("delivery batch size must be between 1 and 1000")
         if self.session_days < 1 or self.magic_link_minutes < 1:
             raise ValueError("authentication lifetimes must be positive")
 

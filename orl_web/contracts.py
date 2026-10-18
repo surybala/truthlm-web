@@ -17,7 +17,7 @@ class ContractError(ValueError):
 
 @lru_cache(maxsize=None)
 def _validator(name: str) -> Draft202012Validator:
-    if name not in {"metrics-snapshot", "publication-bundle", "readiness-assessment", "research-request"}:
+    if name not in {"metrics-snapshot", "publication-bundle", "readiness-assessment"}:
         raise ContractError(f"unknown contract {name!r}")
     path = Path(__file__).with_name("contracts") / "v1" / f"{name}.schema.json"
     schema = json.loads(path.read_text(encoding="utf-8"))

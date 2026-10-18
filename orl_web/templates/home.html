@@ -143,20 +143,24 @@
 {% if not viewer %}
 <section id="join" class="join-band" aria-labelledby="join-title">
   <div class="section-inner join-layout">
-    {% if access_mode == 'invite' %}
     <div>
+      {% if access_mode == 'invite' %}
       <h2 id="join-title">Join the waitlist</h2>
-      <p>We are onboarding users gradually. Once your email is approved, you can subscribe to topics and choose paid private research when you have a question that deserves a deeper investigation.</p>
-      <p class="join-note">Reading published articles remains open to everyone.</p>
+      <p>We are opening email subscriptions gradually. Join the waitlist, and when your place opens, new investigations will arrive in your inbox.</p>
+      {% else %}
+      <h2 id="join-title">Subscribe to new research</h2>
+      <p>Sign in with your email address and new investigations will arrive in your inbox.</p>
+      {% endif %}
+      <ul class="access-levels">
+        <li><strong>Read</strong><span>Every investigation and the method, open to everyone without an account.</span></li>
+        <li><strong>Subscribe</strong><span>New investigations by email, at most one per research domain each week. Choose the domains you follow.</span></li>
+      </ul>
     </div>
+    {% if access_mode == 'invite' %}
     {% set join_submit_label = "Join the waitlist" %}
     {% include "_join_form.html" %}
     {% else %}
-    <div>
-      <h2 id="join-title">Bring a question worth investigating</h2>
-      <p>Sign in to request a private, scientifically grounded investigation of your research question.</p>
-    </div>
-    <div class="join-open"><a class="button dark" href="/login">Sign in with email</a></div>
+    <div class="join-open"><a class="button dark" href="/login?next=/subscriptions">Subscribe with email</a></div>
     {% endif %}
   </div>
 </section>

@@ -110,6 +110,44 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!payload.publications.length) addText(queue, "p", "No publication revisions are awaiting review.");
   };
 
+  const deliveryStatus = document.getElementById("delivery-status");
+  const deliveryRun = document.getElementById("delivery-run");
+  const loadDelivery = async () => {
+    const payload = await api("/v1/admin/deliveries");
+    deliveryStatus.replaceChildren();
+    [["Subscribers", payload.subscribers], ["Waiting to send", payload.remaining],
+     ["Sent", payload.deliveries.sent], ["Failed", payload.deliveries.failed],
+     ["Interrupted", payload.deliveries.sending],
+     ["Last sent", payload.last_sent_at ? new Date(payload.last_sent_at).toLocaleString() : "never"]]
+      .forEach(([label, value]) => {
+        const row = document.createElement("div");
+        addText(row, "dt", label);
+        addText(row, "dd", String(value));
+        deliveryStatus.appendChild(row);
+      });
+    return payload;
+  };
+  deliveryRun?.addEventListener("click", async () => {
+    const current = await loadDelivery().catch(showError);
+    if (!current || !window.confirm(`Email new matching research to ${current.subscribers} subscribers?`)) return;
+    deliveryRun.disabled = true;
+    const totals = {queued: 0, emails_sent: 0, emails_failed: 0, skipped: 0};
+    try {
+      for (let batch = 0; batch < 500; batch += 1) {
+        const result = await api("/v1/admin/deliveries/run", {method: "POST", body: "{}"});
+        Object.keys(totals).forEach((key) => { totals[key] += result[key]; });
+        status.textContent = `Sending: ${totals.emails_sent} emails sent, ${result.remaining} subscribers remaining.`;
+        if (!result.remaining || (!result.emails_sent && !result.emails_failed && !result.skipped)) break;
+      }
+      status.textContent = `Delivery finished: ${totals.emails_sent} emails sent, ${totals.emails_failed} failed, ${totals.skipped} skipped.`;
+    } catch (error) {
+      showError(error);
+    } finally {
+      deliveryRun.disabled = false;
+      await loadDelivery().catch(showError);
+    }
+  });
+
   const showError = (error) => { status.textContent = error.message; };
   const initialize = async () => {
     try {
@@ -118,7 +156,7 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error("Your session does not have editorial access.");
       }
       csrfToken = identity.csrf_token;
-      await loadQueue();
+      await Promise.all([loadQueue(), loadDelivery()]);
       workspace.hidden = false;
       status.textContent = "Authenticated editorial queue loaded.";
     } catch (error) {

@@ -1,4 +1,4 @@
-"""FastAPI application for the initial manual ORL Web editorial loop."""
+"""FastAPI application for TruthLM publishing, subscriptions, and the editorial loop."""
 from __future__ import annotations
 
 import logging
@@ -27,17 +27,17 @@ from .auth import (Principal, csrf_for_session, optional_principal_dependency,
 from .config import UNASSIGNED_DOMAIN, Settings
 from .contracts import ContractError, validate_contract, verify_checksum
 from .db import default_session_factory, session_dependency
+from .delivery import EmailItem, compose_research_email, unsubscribe_url, valid_unsubscribe
 from .email import Mailer, default_mailer
 from .models import (AccessRequest, AccessStatus, Article, ArticleRevision, AuditEvent,
-                     BrowserSession, ClusterMembership, CycleSelection, CycleState, FeedAccessToken,
+                     BrowserSession, ClusterMembership, EmailDelivery, FeedAccessToken,
                      MagicLinkToken, MetricsSnapshot, ModerationState, PublicStatus,
                      PublicationBundle, QuestionCluster, QuestionReport, QuestionSubmission,
-                     ReadinessAssessment, ResearchSubscription, Role, User, Vote, WeeklyCycle,
-                     utcnow)
+                     ReadinessAssessment, ResearchSubscription, Role, User, utcnow)
 from .presentation import bibliographic_references, research_journey, share_links
-from .schemas import (AccessDecision, AccessInvite, AccessRequestCreate, CycleCreate,
-                      EditorialReason, FreezeRequest, ManualReadiness, ModerationDecision,
-                      MagicLinkRequest, PrivateAnswer, QuestionCreate, QuestionReportCreate,
+from .schemas import (AccessDecision, AccessInvite, AccessRequestCreate, DeliveryRun,
+                      EditorialReason, EmailPreference, ManualReadiness, ModerationDecision,
+                      MagicLinkRequest, QuestionCreate, QuestionReportCreate,
                       QuestionReportResolution, ResearchSubscriptionCreate)
 
 
@@ -90,22 +90,8 @@ def _audit(session: Session, user: User, action: str, target_type: str,
                            target_id=target_id, details=details or {}))
 
 
-def _active_cycle(session: Session, *, lock: bool = False) -> WeeklyCycle:
-    query = select(WeeklyCycle).where(WeeklyCycle.state == CycleState.open)
-    if lock:
-        query = query.with_for_update()
-    cycles = list(session.scalars(query.order_by(WeeklyCycle.starts_at)))
-    if not cycles:
-        raise HTTPException(409, "no open weekly cycle")
-    if len(cycles) > 1:
-        raise HTTPException(500, "multiple open weekly cycles")
-    cycle = cycles[0]
-    now = utcnow()
-    starts_at = cycle.starts_at.replace(tzinfo=UTC) if cycle.starts_at.tzinfo is None else cycle.starts_at
-    ends_at = cycle.ends_at.replace(tzinfo=UTC) if cycle.ends_at.tzinfo is None else cycle.ends_at
-    if not starts_at <= now < ends_at:
-        raise HTTPException(409, "weekly voting window is not active")
-    return cycle
+def _aware(value: datetime) -> datetime:
+    return value.replace(tzinfo=UTC) if value.tzinfo is None else value
 
 
 def _readiness_payload(item: ReadinessAssessment) -> dict[str, Any]:
@@ -183,6 +169,27 @@ def _article_facets(session: Session, article: Article,
     return {"domains": domains, "researchers": researchers}
 
 
+_DELIVERY_ATTEMPTS = 3
+
+
+def _subscriptions(session: Session, user_id: str) -> list[ResearchSubscription]:
+    return list(session.scalars(select(ResearchSubscription).where(
+        ResearchSubscription.user_id == user_id)))
+
+
+def _interests(items: list[ResearchSubscription]) -> tuple[bool, set[str], set[str]]:
+    """A member's interests: follows everything, normalized domain keys, researcher keys."""
+    return (any(item.kind == "all" for item in items),
+            {item.value_key for item in items if item.kind == "domain"},
+            {item.value_key for item in items if item.kind == "researcher"})
+
+
+def _matches(interests: tuple[bool, set[str], set[str]], facets: dict[str, list[str]]) -> bool:
+    include_all, domains, researchers = interests
+    return (include_all or bool(domains & {_facet_key(value) for value in facets["domains"]})
+            or bool(researchers & {_facet_key(value) for value in facets["researchers"]}))
+
+
 def _rss_response(request: Request, settings: Settings, session: Session,
                   articles: list[Article], *, title: str, description: str,
                   self_url: str) -> Response:
@@ -239,10 +246,10 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     admin = require_roles(current, Role.admin)
     service = require_roles(current, Role.service, Role.admin)
     publisher = require_roles(current, Role.editor, Role.admin, Role.service)
-    paid_researcher = require_roles(current, Role.paid, Role.editor, Role.admin)
+    question_author = require_roles(current, Role.editor, Role.admin)
 
     app = FastAPI(title="TruthLM API", version="0.1.0",
-                  description="Public research, question, voting, and publishing service for ORL")
+                  description="Public research publishing and email subscription service for ORL")
     app.mount("/static", StaticFiles(directory=_PACKAGE / "static"), name="static")
     templates = Jinja2Templates(directory=_PACKAGE / "templates")
     templates.env.globals.update(base_url=settings.base_url, access_mode=settings.access_mode,
@@ -260,8 +267,25 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
         user = session.scalar(select(User).where(User.email == email))
         return user is not None and user.role != Role.user
 
+    def new_member_role(email: str) -> Role:
+        if email in settings.admin_emails:
+            return Role.admin
+        return Role.editor if email in settings.editor_emails else Role.user
+
+    def ensure_member(session: Session, email: str) -> User:
+        """Return the member account for an address, creating a subscriber following all research."""
+        user = session.scalar(select(User).where(User.email == email))
+        if user is None:
+            user = User(external_subject=f"email:{email}", email=email, role=new_member_role(email))
+            session.add(user)
+            session.flush()
+            session.add(ResearchSubscription(user_id=user.id, kind="all", value_key="all",
+                                             label="All weekly research"))
+            session.flush()
+        return user
+
     def decide_access(session: Session, actor: User, record: AccessRequest,
-                      status: AccessStatus, reason: str) -> None:
+                      status: AccessStatus, reason: str) -> User | None:
         previous = record.status
         now = utcnow()
         record.status = status
@@ -276,10 +300,13 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
                     .values(revoked_at=now))
         _audit(session, actor, f"access.{status.value}", "access_request", record.id,
                {"reason": reason, "previous": previous.value})
+        return ensure_member(session, record.email) if status == AccessStatus.approved else None
 
-    def notify_access(record: AccessRequest) -> bool:
+    def notify_access(record: AccessRequest, member: User) -> bool:
         try:
-            mailer.send_access_approved(record.email, f"{settings.base_url}/login")
+            mailer.send_access_approved(record.email, f"{settings.base_url}/login",
+                                        unsubscribe_url(settings.base_url, member.id,
+                                                        settings.jwt_secret))
         except Exception:
             logging.getLogger("orl_web.access").exception(
                 "access approval notice failed for request %s", record.id)
@@ -381,14 +408,7 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
                 "magic_link_minutes": settings.magic_link_minutes,
                 "error": "That sign-in link is invalid or has expired. Request a new one.",
             }, status_code=400)
-        user = session.scalar(select(User).where(User.email == item.email))
-        if user is None:
-            role = Role.admin if item.email in settings.admin_emails else (
-                Role.editor if item.email in settings.editor_emails else (
-                    Role.paid if item.email in settings.paid_emails else Role.user))
-            user = User(external_subject=f"email:{item.email}", email=item.email, role=role)
-            session.add(user)
-            session.flush()
+        user = ensure_member(session, item.email)
         raw_session = secrets.token_urlsafe(32)
         stored = BrowserSession(token_hash=token_hash(raw_session), user_id=user.id,
                                 expires_at=now + timedelta(days=settings.session_days))
@@ -473,9 +493,9 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
             return {**_access_payload(record), "notified": False, "idempotent_replay": True}
         if record.status not in allowed_from:
             raise HTTPException(409, f"cannot {body.action} a {record.status.value} request")
-        decide_access(session, actor, record, target, body.reason)
+        member = decide_access(session, actor, record, target, body.reason)
         session.commit()
-        notified = notify_access(record) if target == AccessStatus.approved else False
+        notified = notify_access(record, member) if member is not None else False
         return {**_access_payload(record), "notified": notified, "idempotent_replay": False}
 
     @app.post("/v1/admin/access")
@@ -490,13 +510,13 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
                                    status=AccessStatus.pending)
             session.add(record)
             session.flush()
-        decide_access(session, actor, record, AccessStatus.approved, body.reason)
+        member = decide_access(session, actor, record, AccessStatus.approved, body.reason)
         try:
             session.commit()
         except IntegrityError as exc:
             session.rollback()
             raise HTTPException(409, "that address was added concurrently; reload and retry") from exc
-        return {**_access_payload(record), "notified": notify_access(record),
+        return {**_access_payload(record), "notified": notify_access(record, member),
                 "idempotent_replay": False}
 
     @app.get("/subscriptions", response_class=HTMLResponse)
@@ -526,8 +546,54 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
             "options": {"domains": sorted(domains, key=str.casefold),
                         "researchers": sorted(researchers, key=str.casefold)},
             "personal_feed_active": feed is not None,
+            "email_enabled": user.email_opt_out_at is None,
             "public_feed_url": f"{settings.base_url}/feeds/research.xml",
         }
+
+    def set_email_delivery(session: Session, user: User, enabled: bool) -> None:
+        if enabled == (user.email_opt_out_at is None):
+            return
+        now = utcnow()
+        if enabled:
+            user.email_opt_out_at = None
+            user.email_subscribed_at = now
+        else:
+            user.email_opt_out_at = now
+        _audit(session, user, "email.subscribed" if enabled else "email.unsubscribed",
+               "email_subscription", user.id)
+
+    @app.put("/v1/subscriptions/email")
+    def update_email_delivery(body: EmailPreference, principal: Principal = Depends(any_user),
+                              session: Session = Depends(get_session)) -> dict[str, bool]:
+        user = _user(session, principal)
+        set_email_delivery(session, user, body.enabled)
+        session.commit()
+        return {"email_enabled": user.email_opt_out_at is None}
+
+    def unsubscribe_member(session: Session, user_id: str, signature: str) -> User:
+        user = session.get(User, user_id) if len(signature) == 64 else None
+        if user is None or not valid_unsubscribe(user_id, signature, settings.jwt_secret):
+            raise HTTPException(404, "unsubscribe link not found")
+        return user
+
+    def unsubscribe_page(request: Request, user: User, *, action: str) -> HTMLResponse:
+        return templates.TemplateResponse(request, "unsubscribe.html", {
+            "action": action, "unsubscribed": user.email_opt_out_at is not None})
+
+    @app.get("/unsubscribe/{user_id}/{signature}", response_class=HTMLResponse)
+    def unsubscribe_confirmation(user_id: str, signature: str, request: Request,
+                                 session: Session = Depends(get_session)):
+        user = unsubscribe_member(session, user_id, signature)
+        return unsubscribe_page(request, user, action=request.url.path)
+
+    @app.post("/unsubscribe/{user_id}/{signature}", response_class=HTMLResponse)
+    def unsubscribe(user_id: str, signature: str, request: Request,
+                    session: Session = Depends(get_session)):
+        """Accepts the confirmation form and RFC 8058 one-click requests from mail providers."""
+        user = unsubscribe_member(session, user_id, signature)
+        set_email_delivery(session, user, False)
+        session.commit()
+        return unsubscribe_page(request, user, action=request.url.path)
 
     @app.get("/v1/subscriptions")
     def list_subscriptions(principal: Principal = Depends(any_user),
@@ -627,20 +693,13 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
         access = session.get(FeedAccessToken, token_hash(raw_token))
         if access is None:
             raise HTTPException(404, "feed not found")
-        subscriptions = list(session.scalars(select(ResearchSubscription).where(
-            ResearchSubscription.user_id == access.user_id)))
-        include_all = any(item.kind == "all" for item in subscriptions)
-        domains = {item.value_key for item in subscriptions if item.kind == "domain"}
-        researchers = {item.value_key for item in subscriptions if item.kind == "researcher"}
+        subscriptions = _subscriptions(session, access.user_id)
+        interests = _interests(subscriptions)
+        include_all = interests[0]
         candidates = list(session.scalars(select(Article).where(
             Article.status == "published").order_by(Article.published_at.desc()).limit(100)))
-        articles = []
-        for article in candidates:
-            facets = _article_facets(session, article, settings.domain_labels)
-            domain_keys = {_facet_key(value) for value in facets["domains"]}
-            researcher_keys = {_facet_key(value) for value in facets["researchers"]}
-            if include_all or domains.intersection(domain_keys) or researchers.intersection(researcher_keys):
-                articles.append(article)
+        articles = [article for article in candidates
+                    if _matches(interests, _article_facets(session, article, settings.domain_labels))]
         now = utcnow()
         last_used = access.last_used_at.replace(tzinfo=UTC) if access.last_used_at and \
             access.last_used_at.tzinfo is None else access.last_used_at
@@ -718,8 +777,9 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     def questions_page(request: Request, viewer: Principal | None = Depends(optional_current)):
         if viewer is None:
             return RedirectResponse("/login?next=/questions", status_code=303)
-        return templates.TemplateResponse(request, "questions.html", {
-            "paid_access": viewer.role in {Role.paid, Role.editor, Role.admin}})
+        if viewer.role not in {Role.editor, Role.admin}:
+            return RedirectResponse("/subscriptions", status_code=303)
+        return templates.TemplateResponse(request, "questions.html", {})
 
     @app.get("/moderation", response_class=HTMLResponse)
     def moderation_console(request: Request):
@@ -736,7 +796,7 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
 
     @app.post("/v1/questions", status_code=201)
     def submit_question(body: QuestionCreate, idempotency_key: str = Header(alias="Idempotency-Key"),
-                        principal: Principal = Depends(paid_researcher),
+                        principal: Principal = Depends(question_author),
                         session: Session = Depends(get_session)) -> dict[str, Any]:
         if not 8 <= len(idempotency_key) <= 128:
             raise HTTPException(400, "Idempotency-Key must be 8 to 128 characters")
@@ -851,22 +911,11 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
     @app.get("/v1/questions")
     def list_questions(principal: Principal = Depends(any_user),
                        session: Session = Depends(get_session)) -> dict[str, Any]:
-        cycle = session.scalar(select(WeeklyCycle).where(WeeklyCycle.state == CycleState.open))
-        viewer_user = session.get(User, principal.user_id) if principal.user_id else \
-            session.scalar(select(User).where(User.external_subject == principal.subject))
-        viewer_votes: set[str] = set()
-        if cycle and viewer_user:
-            viewer_votes = set(session.scalars(select(Vote.cluster_id).where(
-                Vote.user_id == viewer_user.id, Vote.cycle_id == cycle.id)))
         clusters = list(session.scalars(select(QuestionCluster).where(
             QuestionCluster.public_status.in_([PublicStatus.open, PublicStatus.selected]))
             .order_by(QuestionCluster.created_at, QuestionCluster.id)))
         items = []
         for cluster in clusters:
-            votes = 0
-            if cycle:
-                votes = session.scalar(select(func.count()).select_from(Vote).where(
-                    Vote.cluster_id == cluster.id, Vote.cycle_id == cycle.id)) or 0
             readiness = session.scalar(select(ReadinessAssessment).where(
                 ReadinessAssessment.cluster_id == cluster.id,
                 ReadinessAssessment.question_revision == cluster.question_revision)
@@ -877,25 +926,14 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
                           "status": cluster.public_status.value, "tags": cluster.tags,
                           "domain": domain,
                           "domain_label": _domain_label(settings.domain_labels, domain),
-                          "votes": int(votes),
-                          "viewer_has_voted": cluster.id in viewer_votes,
                           "readiness": _readiness_payload(readiness) if readiness else None})
-        # Open questions are ranked within their domain; already-selected ones follow, unranked.
+        # Grouped by domain in configured order; oldest first within a domain (stable sort).
         order = {key: index for index, key in enumerate(settings.domain_labels)}
-        items.sort(key=lambda item: (order.get(item["domain"], len(order)), item["domain"],
-                                     item["status"] != PublicStatus.open.value, -item["votes"]))
-        ranks: dict[str, int] = {}
-        for item in items:
-            item["rank"] = None
-            if item["status"] == PublicStatus.open.value:
-                ranks[item["domain"]] = ranks.get(item["domain"], 0) + 1
-                item["rank"] = ranks[item["domain"]]
+        items.sort(key=lambda item: (order.get(item["domain"], len(order)), item["domain"]))
         domains = [{"key": key, "label": label} for key, label in settings.domain_labels.items()]
         if any(item["domain"] == UNASSIGNED_DOMAIN for item in items):
             domains.append({"key": UNASSIGNED_DOMAIN, "label": "Unassigned"})
-        cycle_payload = None if cycle is None else {
-            "key": cycle.cycle_key, "starts_at": _iso(cycle.starts_at), "ends_at": _iso(cycle.ends_at)}
-        return {"cycle": cycle_payload, "domains": domains, "questions": items}
+        return {"domains": domains, "questions": items}
 
     @app.get("/v1/me/submissions")
     def my_submissions(principal: Principal = Depends(any_user),
@@ -913,22 +951,7 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
             "moderation_state": item.moderation_state.value,
             "moderation_reason": item.moderation_reason if item.moderation_state != ModerationState.pending else "",
             "cluster_id": memberships.get(item.id), "created_at": _iso(item.created_at),
-            "answer": item.answer, "answered_at": _iso(item.answered_at) if item.answered_at else None,
         } for item in submissions]}
-
-    @app.put("/v1/admin/submissions/{submission_id}/answer")
-    def answer_private_question(submission_id: str, body: PrivateAnswer,
-                                principal: Principal = Depends(editor),
-                                session: Session = Depends(get_session)) -> dict[str, Any]:
-        actor = _user(session, principal)
-        submission = session.get(QuestionSubmission, submission_id)
-        if submission is None:
-            raise HTTPException(404, "submission not found")
-        submission.answer = body.answer.strip()
-        submission.answered_at = utcnow()
-        _audit(session, actor, "question.answered", "question_submission", submission.id)
-        session.commit()
-        return {"submission_id": submission.id, "answered_at": _iso(submission.answered_at)}
 
     @app.post("/v1/questions/{cluster_id}/report", status_code=201)
     def report_question(cluster_id: str, body: QuestionReportCreate,
@@ -993,79 +1016,6 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
         return {"report_id": report.id, "status": report.status,
                 "resolution": report.resolution, "idempotent_replay": False}
 
-    @app.post("/v1/admin/cycles", status_code=201)
-    def create_cycle(body: CycleCreate, principal: Principal = Depends(admin),
-                     session: Session = Depends(get_session)) -> dict[str, Any]:
-        actor = _user(session, principal)
-        if body.ends_at <= body.starts_at:
-            raise HTTPException(422, "ends_at must be after starts_at")
-        existing = session.scalar(select(WeeklyCycle).where(WeeklyCycle.cycle_key == body.cycle_key))
-        if existing:
-            return {"cycle_id": existing.id, "cycle_key": existing.cycle_key,
-                    "state": existing.state.value, "idempotent_replay": True}
-        if session.scalar(select(WeeklyCycle).where(WeeklyCycle.state == CycleState.open)):
-            raise HTTPException(409, "an open weekly cycle already exists")
-        cycle = WeeklyCycle(cycle_key=body.cycle_key, starts_at=body.starts_at,
-                            ends_at=body.ends_at, state=CycleState.open)
-        session.add(cycle)
-        try:
-            session.flush()
-            _audit(session, actor, "cycle.opened", "weekly_cycle", cycle.id,
-                   {"cycle_key": cycle.cycle_key})
-            session.commit()
-        except IntegrityError as exc:
-            session.rollback()
-            raise HTTPException(409, "an open weekly cycle already exists") from exc
-        return {"cycle_id": cycle.id, "cycle_key": cycle.cycle_key,
-                "state": cycle.state.value, "idempotent_replay": False}
-
-    @app.put("/v1/questions/{cluster_id}/vote")
-    def cast_vote(cluster_id: str, principal: Principal = Depends(any_user),
-                  session: Session = Depends(get_session)) -> dict[str, Any]:
-        user = _user(session, principal)
-        if not user.voting_eligible:
-            raise HTTPException(403, "user is not eligible to vote")
-        cycle = _active_cycle(session, lock=True)
-        cluster = session.get(QuestionCluster, cluster_id)
-        if not cluster or cluster.public_status != PublicStatus.open:
-            raise HTTPException(404, "open question cluster not found")
-        existing = session.scalar(select(Vote).where(Vote.user_id == user.id,
-                                  Vote.cluster_id == cluster.id, Vote.cycle_id == cycle.id))
-        if existing:
-            return {"cluster_id": cluster.id, "cycle": cycle.cycle_key, "active": True,
-                    "idempotent_replay": True}
-        since = utcnow() - timedelta(hours=1)
-        recent = session.scalar(select(func.count()).select_from(AuditEvent).where(
-            AuditEvent.actor_id == user.id, AuditEvent.action.in_(["vote.cast", "vote.removed"]),
-            AuditEvent.created_at >= since)) or 0
-        if recent >= settings.vote_limit_per_hour:
-            raise HTTPException(429, "vote rate limit exceeded")
-        session.add(Vote(user_id=user.id, cluster_id=cluster.id, cycle_id=cycle.id))
-        _audit(session, user, "vote.cast", "question_cluster", cluster.id,
-               {"cycle_key": cycle.cycle_key})
-        try:
-            session.commit()
-        except IntegrityError:
-            session.rollback()
-            return {"cluster_id": cluster.id, "cycle": cycle.cycle_key, "active": True,
-                    "idempotent_replay": True}
-        return {"cluster_id": cluster.id, "cycle": cycle.cycle_key, "active": True,
-                "idempotent_replay": False}
-
-    @app.delete("/v1/questions/{cluster_id}/vote", status_code=204)
-    def remove_vote(cluster_id: str, principal: Principal = Depends(any_user),
-                    session: Session = Depends(get_session)) -> Response:
-        user = _user(session, principal)
-        cycle = _active_cycle(session, lock=True)
-        vote = session.scalar(select(Vote).where(Vote.user_id == user.id,
-                              Vote.cluster_id == cluster_id, Vote.cycle_id == cycle.id))
-        if vote:
-            session.delete(vote)
-            _audit(session, user, "vote.removed", "question_cluster", cluster_id,
-                   {"cycle_key": cycle.cycle_key})
-            session.commit()
-        return Response(status_code=204)
-
     @app.post("/v1/admin/readiness", status_code=201)
     def record_readiness(body: ManualReadiness, principal: Principal = Depends(editor),
                          session: Session = Depends(get_session)) -> dict[str, Any]:
@@ -1100,97 +1050,6 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
                {"assessment_id": item.assessment_id, "label": item.label})
         session.commit()
         return payload
-
-    def research_request(cycle: WeeklyCycle, cluster: QuestionCluster, domain: str) -> dict[str, Any]:
-        payload = {
-            "schema_version": "1", "request_id": f"weekly-{cycle.cycle_key}-{domain}",
-            "cycle_id": cycle.cycle_key, "cluster_id": cluster.id,
-            "question_revision": cluster.question_revision, "question": cluster.canonical_question,
-            "answer_format": "long_form_article", "requested_at": _iso(cycle.frozen_at),
-            "idempotency_key": f"research:{cycle.cycle_key}:{cluster.id}:{cluster.question_revision}",
-        }
-        validate_contract("research-request", payload)
-        return payload
-
-    def cycle_payload(session: Session, cycle: WeeklyCycle) -> dict[str, Any]:
-        selections = list(session.scalars(select(CycleSelection).where(
-            CycleSelection.cycle_id == cycle.id).order_by(CycleSelection.domain)))
-        winners, requests = [], []
-        for selection in selections:
-            cluster = session.get(QuestionCluster, selection.cluster_id)
-            winners.append({"domain": selection.domain,
-                            "domain_label": _domain_label(settings.domain_labels, selection.domain),
-                            "cluster_id": cluster.id, "question": cluster.canonical_question,
-                            "votes": selection.votes, "override": selection.override})
-            requests.append(research_request(cycle, cluster, selection.domain))
-        return {"cycle": cycle.cycle_key, "state": cycle.state.value,
-                "starts_at": _iso(cycle.starts_at), "ends_at": _iso(cycle.ends_at),
-                "frozen_at": _iso(cycle.frozen_at) if cycle.frozen_at else None,
-                "selection_reason": cycle.selection_reason, "winners": winners,
-                "vote_snapshot": cycle.vote_snapshot, "research_requests": requests}
-
-    @app.get("/v1/admin/cycles")
-    def list_cycles(principal: Principal = Depends(admin),
-                    session: Session = Depends(get_session)) -> dict[str, Any]:
-        cycles = session.scalars(select(WeeklyCycle).order_by(WeeklyCycle.starts_at.desc()).limit(12))
-        return {"cycles": [cycle_payload(session, cycle) for cycle in cycles]}
-
-    @app.post("/v1/admin/cycles/{cycle_key}/freeze")
-    def freeze_cycle(cycle_key: str, body: FreezeRequest, principal: Principal = Depends(admin),
-                     session: Session = Depends(get_session)) -> dict[str, Any]:
-        actor = _user(session, principal)
-        cycle = session.scalar(select(WeeklyCycle).where(
-            WeeklyCycle.cycle_key == cycle_key).with_for_update())
-        if not cycle:
-            raise HTTPException(404, "cycle not found")
-        if cycle.state == CycleState.frozen:
-            return {**cycle_payload(session, cycle), "idempotent_replay": True}
-        if cycle.state != CycleState.open:
-            raise HTTPException(409, "cycle is not open")
-        rows = list(session.execute(
-            select(QuestionCluster.id, QuestionCluster.domain, QuestionCluster.created_at,
-                   func.count(Vote.id).label("votes"))
-            .outerjoin(Vote, (Vote.cluster_id == QuestionCluster.id) & (Vote.cycle_id == cycle.id))
-            .where(QuestionCluster.public_status == PublicStatus.open)
-            .group_by(QuestionCluster.id, QuestionCluster.domain, QuestionCluster.created_at)
-            .order_by(func.count(Vote.id).desc(), QuestionCluster.created_at, QuestionCluster.id)))
-        if not rows:
-            raise HTTPException(409, "no eligible question clusters")
-        by_id = {row.id: row for row in rows}
-        ranked: dict[str, list] = {}
-        for row in rows:
-            ranked.setdefault(row.domain or UNASSIGNED_DOMAIN, []).append(row)
-        overrides = list(dict.fromkeys(body.override_cluster_ids))
-        if any(cluster_id not in by_id for cluster_id in overrides):
-            raise HTTPException(422, "override cluster is not eligible")
-        override_domains = [by_id[cluster_id].domain or UNASSIGNED_DOMAIN for cluster_id in overrides]
-        if len(set(override_domains)) != len(override_domains):
-            raise HTTPException(422, "at most one override per domain")
-        winners = {domain: (domain_rows[0], False) for domain, domain_rows in ranked.items()
-                   if domain_rows[0].votes >= 1}
-        winners.update({domain: (by_id[cluster_id], True)
-                        for domain, cluster_id in zip(override_domains, overrides)})
-        snapshot = {"rule": "per_domain_votes_desc_created_at_asc_id_asc", "minimum_votes": 1,
-                    "domains": {domain: [{"cluster_id": row.id, "votes": int(row.votes)}
-                                         for row in ranked[domain]] for domain in sorted(ranked)},
-                    "winners": {domain: winners[domain][0].id for domain in sorted(winners)},
-                    "overrides": overrides}
-        now = utcnow()
-        cycle.state = CycleState.frozen
-        cycle.vote_snapshot = snapshot
-        cycle.selection_reason = body.reason
-        cycle.frozen_at = now
-        for domain, (row, override) in sorted(winners.items()):
-            session.add(CycleSelection(cycle_id=cycle.id, domain=domain, cluster_id=row.id,
-                                       votes=int(row.votes), override=override))
-            winner = session.get(QuestionCluster, row.id)
-            winner.public_status = PublicStatus.selected
-            winner.updated_at = now
-        _audit(session, actor, "cycle.frozen", "weekly_cycle", cycle.id,
-               {"winners": snapshot["winners"], "reason": body.reason,
-                "override": bool(overrides), "overrides": overrides})
-        session.commit()
-        return {**cycle_payload(session, cycle), "idempotent_replay": False}
 
     @app.post("/v1/admin/metrics", status_code=201)
     def import_metrics(payload: dict = Body(...), principal: Principal = Depends(service),
@@ -1428,6 +1287,133 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
         session.commit()
         return {"bundle_id": bundle_id, "slug": article.slug,
                 "status": "retracted", "idempotent_replay": False}
+
+    def email_eligible(session: Session, user: User) -> bool:
+        return bool(user.email) and user.email_opt_out_at is None and access_allowed(session, user.email)
+
+    def deliverable():
+        return (EmailDelivery.status == "pending") | (
+            (EmailDelivery.status == "failed") & (EmailDelivery.attempts < _DELIVERY_ATTEMPTS))
+
+    def remaining_subscribers(session: Session) -> int:
+        return session.scalar(select(func.count(func.distinct(EmailDelivery.user_id)))
+                              .where(deliverable())) or 0
+
+    def queue_deliveries(session: Session) -> int:
+        # Approved addresses are subscribers even if they were approved before accounts were
+        # created at approval time.
+        for email in list(session.scalars(select(AccessRequest.email).where(
+                AccessRequest.status == AccessStatus.approved))):
+            ensure_member(session, email)
+        articles = list(session.scalars(select(Article).where(Article.status == "published")))
+        first_published = {article_id: _aware(value) for article_id, value in session.execute(
+            select(ArticleRevision.article_id, func.min(ArticleRevision.published_at))
+            .where(ArticleRevision.published_at.is_not(None)).group_by(ArticleRevision.article_id))}
+        facets = {article.id: _article_facets(session, article, settings.domain_labels)
+                  for article in articles}
+        existing = {(user_id, article_id) for user_id, article_id in session.execute(
+            select(EmailDelivery.user_id, EmailDelivery.article_id))}
+        queued = 0
+        for user in session.scalars(select(User).where(User.email.is_not(None))
+                                    .order_by(User.created_at, User.id)).all():
+            if not email_eligible(session, user):
+                continue
+            since = _aware(user.email_subscribed_at or user.created_at)
+            interests = _interests(_subscriptions(session, user.id))
+            for article in articles:
+                if ((user.id, article.id) not in existing and first_published[article.id] >= since
+                        and _matches(interests, facets[article.id])):
+                    session.add(EmailDelivery(user_id=user.id, article_id=article.id))
+                    queued += 1
+        session.flush()
+        return queued
+
+    def send_deliveries(session: Session, limit: int) -> tuple[int, int, int]:
+        recipients = session.execute(
+            select(EmailDelivery.user_id).join(User, User.id == EmailDelivery.user_id)
+            .where(deliverable()).group_by(EmailDelivery.user_id, User.created_at)
+            .order_by(func.min(EmailDelivery.attempts), User.created_at, EmailDelivery.user_id)
+            .limit(limit)).scalars().all()
+        sent = failed = skipped = 0
+        for user_id in recipients:
+            user = session.get(User, user_id)
+            eligible = email_eligible(session, user)
+            ready = []
+            for item in session.scalars(select(EmailDelivery).where(
+                    EmailDelivery.user_id == user_id, deliverable())
+                    .order_by(EmailDelivery.created_at, EmailDelivery.id)).all():
+                article = session.get(Article, item.article_id)
+                if eligible and article.status == "published":
+                    ready.append((item, article))
+                else:
+                    item.status = "skipped"
+                    skipped += 1
+            # Rows are claimed with a conditional update and committed before sending: a concurrent
+            # run cannot claim them too, and an interrupted send stays "sending" and is never
+            # emailed a second time.
+            claimed = set()
+            if ready:
+                claimed = set(session.scalars(
+                    update(EmailDelivery).where(EmailDelivery.id.in_([item.id for item, _ in ready]),
+                                                deliverable())
+                    .values(status="sending", attempts=EmailDelivery.attempts + 1)
+                    .returning(EmailDelivery.id)))
+            session.commit()
+            ready = [(item, article) for item, article in ready if item.id in claimed]
+            if not ready:
+                continue
+            message = compose_research_email([
+                EmailItem(title=article.title, summary=article.summary,
+                          url=f"{settings.base_url}/research/{quote(article.slug)}",
+                          domains=tuple(_article_facets(session, article,
+                                                        settings.domain_labels)["domains"]))
+                for _, article in ready],
+                base_url=settings.base_url,
+                unsubscribe=unsubscribe_url(settings.base_url, user.id, settings.jwt_secret))
+            try:
+                mailer.send_research(user.email, message)
+            except Exception as exc:
+                logging.getLogger("orl_web.delivery").exception(
+                    "research email failed for subscriber %s", user.id)
+                for item, _ in ready:
+                    item.status = "failed"
+                    item.last_error = f"{type(exc).__name__}: {exc}"[:500]
+                failed += 1
+            else:
+                now = utcnow()
+                for item, _ in ready:
+                    item.status = "sent"
+                    item.sent_at = now
+                sent += 1
+            session.commit()
+        return sent, failed, skipped
+
+    @app.post("/v1/admin/deliveries/run")
+    def run_delivery(body: DeliveryRun | None = None, principal: Principal = Depends(publisher),
+                     session: Session = Depends(get_session)) -> dict[str, int]:
+        actor = _user(session, principal)
+        limit = body.limit if body and body.limit else settings.delivery_batch_size
+        queued = queue_deliveries(session)
+        session.commit()
+        sent, failed, skipped = send_deliveries(session, limit)
+        result = {"queued": queued, "emails_sent": sent, "emails_failed": failed,
+                  "skipped": skipped, "remaining": remaining_subscribers(session)}
+        _audit(session, actor, "delivery.run", "email_delivery", _iso(utcnow()), result)
+        session.commit()
+        return result
+
+    @app.get("/v1/admin/deliveries")
+    def delivery_status(principal: Principal = Depends(publisher),
+                        session: Session = Depends(get_session)) -> dict[str, Any]:
+        counts = dict(session.execute(select(EmailDelivery.status, func.count())
+                                      .group_by(EmailDelivery.status)).all())
+        members = session.scalars(select(User).where(User.email.is_not(None))).all()
+        last_sent = session.scalar(select(func.max(EmailDelivery.sent_at)))
+        return {"subscribers": sum(1 for user in members if email_eligible(session, user)),
+                "deliveries": {status: int(counts.get(status, 0))
+                               for status in ("pending", "sending", "sent", "failed", "skipped")},
+                "remaining": remaining_subscribers(session),
+                "last_sent_at": _iso(last_sent) if last_sent else None}
 
     @app.get("/v1/articles")
     def public_articles(session: Session = Depends(get_session)) -> dict[str, Any]:

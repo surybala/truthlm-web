@@ -4,11 +4,10 @@ document.addEventListener("DOMContentLoaded", () => {
   const question = document.getElementById("question-text");
   const domain = document.getElementById("question-domain");
   const status = document.getElementById("question-form-status");
+  const approved = document.getElementById("approved-questions");
+  const approvedCount = document.getElementById("approved-count");
   const history = document.getElementById("submission-history");
-  const search = document.getElementById("question-search");
-  const count = document.getElementById("queue-count");
   let csrfToken = null;
-  let submissions = [];
 
   const api = async (path, options = {}) => {
     const response = await fetch(path, {...options, headers: {
@@ -16,7 +15,10 @@ document.addEventListener("DOMContentLoaded", () => {
       ...(options.headers || {})
     }});
     const payload = await response.json().catch(() => ({}));
-    if (!response.ok) throw new Error(payload.detail || `Request failed (${response.status})`);
+    if (!response.ok) {
+      const detail = Array.isArray(payload.detail) ? payload.detail[0]?.msg : payload.detail;
+      throw new Error((detail || `Request failed (${response.status})`).replace(/^Value error, /, ""));
+    }
     return payload;
   };
 
@@ -28,41 +30,47 @@ document.addEventListener("DOMContentLoaded", () => {
     return node;
   };
 
-  const render = () => {
-    const term = search.value.trim().toLowerCase();
-    const visible = submissions.filter((item) =>
-      !term || `${item.text} ${item.answer || ""}`.toLowerCase().includes(term));
-    history.replaceChildren();
-    count.textContent = `${visible.length} ${visible.length === 1 ? "question" : "questions"}`;
-    visible.forEach((item) => {
-      const card = document.createElement("article");
-      card.className = "private-answer-card";
-      const meta = document.createElement("div");
-      meta.className = "private-answer-meta";
-      addText(meta, "span", item.answer ? "Answered" : "In research", `moderation ${item.answer ? "approved" : "pending"}`);
-      addText(meta, "time", new Date(item.created_at).toLocaleDateString());
-      card.appendChild(meta);
-      addText(card, "h3", item.text);
-      if (item.answer) {
-        const answer = document.createElement("div");
-        answer.className = "private-answer-copy";
-        addText(answer, "p", "Research answer", "eyebrow");
-        addText(answer, "p", item.answer);
-        card.appendChild(answer);
-      } else {
-        addText(card, "p", "Our research team is working on this question. The answer will appear here when it is ready.", "history-reason");
-      }
-      history.appendChild(card);
+  const loadApproved = async () => {
+    const payload = await api("/v1/questions");
+    approved.replaceChildren();
+    approvedCount.textContent = `${payload.questions.length} ${payload.questions.length === 1 ? "question" : "questions"}`;
+    payload.domains.forEach((group) => {
+      const items = payload.questions.filter((item) => item.domain === group.key);
+      if (!items.length) return;
+      addText(approved, "h3", group.label, "workspace-domain");
+      items.forEach((item) => {
+        const card = document.createElement("article");
+        card.className = "workspace-item";
+        const meta = document.createElement("div");
+        meta.className = "workspace-meta";
+        addText(meta, "span", item.status, `moderation ${item.status === "open" ? "approved" : "pending"}`);
+        addText(meta, "span", item.readiness ? `readiness: ${item.readiness.label}` : "readiness not assessed");
+        card.appendChild(meta);
+        addText(card, "h4", item.question);
+        addText(card, "p", `Cluster ID: ${item.cluster_id}`, "workspace-id");
+        approved.appendChild(card);
+      });
     });
-    if (!visible.length) {
-      addText(history, "h3", term ? "No research matches your search." : "No private questions yet.");
-      addText(history, "p", term ? "Try a broader phrase." : "Submit your first question to begin your research library.", "loading-line");
-    }
+    if (!payload.questions.length) addText(approved, "p", "No approved questions yet.", "loading-line");
   };
 
   const loadHistory = async () => {
-    submissions = (await api("/v1/me/submissions")).submissions;
-    render();
+    const payload = await api("/v1/me/submissions");
+    history.replaceChildren();
+    payload.submissions.forEach((item) => {
+      const card = document.createElement("article");
+      card.className = "workspace-item";
+      const meta = document.createElement("div");
+      meta.className = "workspace-meta";
+      addText(meta, "span", item.moderation_state, `moderation ${item.moderation_state}`);
+      addText(meta, "time", new Date(item.created_at).toLocaleDateString());
+      card.appendChild(meta);
+      addText(card, "h4", item.text);
+      if (item.cluster_id) addText(card, "p", `Cluster ID: ${item.cluster_id}`, "workspace-id");
+      if (item.moderation_reason) addText(card, "p", item.moderation_reason, "history-reason");
+      history.appendChild(card);
+    });
+    if (!payload.submissions.length) addText(history, "p", "You have not submitted a question yet.", "loading-line");
   };
 
   form.addEventListener("submit", async (event) => {
@@ -74,15 +82,15 @@ document.addEventListener("DOMContentLoaded", () => {
       if (domain.value) body.domain = domain.value;
       await api("/v1/questions", {method: "POST", headers: {"Idempotency-Key": crypto.randomUUID()}, body: JSON.stringify(body)});
       form.reset();
-      status.textContent = "Your private question has been submitted for research.";
+      status.textContent = "Submitted. Approve it in the review console to get its cluster ID.";
       await loadHistory();
     } catch (error) {
       status.textContent = error.message;
     } finally { button.disabled = false; }
   });
-  search.addEventListener("input", render);
+
   fetch("/v1/auth/session").then((response) => response.json()).then(async (identity) => {
     csrfToken = identity.csrf_token || null;
-    await loadHistory();
-  }).catch((error) => { history.textContent = `Unable to load your research: ${error.message}`; });
+    await Promise.all([loadApproved(), loadHistory()]);
+  }).catch((error) => { history.textContent = `Unable to load questions: ${error.message}`; });
 });

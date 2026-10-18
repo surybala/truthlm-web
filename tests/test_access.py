@@ -140,7 +140,9 @@ def test_admins_decide_requests_with_audited_transitions(client, mailer, session
     assert decide(client, "ada@example.edu", "decline").json()["idempotent_replay"] is True
     approved = decide(client, "ada@example.edu", "approve", "A place opened.")
     assert approved.json()["status"] == "approved" and approved.json()["notified"] is True
-    assert mailer.approvals == [("ada@example.edu", "http://127.0.0.1:8080/login")]
+    assert [approval[:2] for approval in mailer.approvals] == [
+        ("ada@example.edu", "http://127.0.0.1:8080/login")]
+    assert mailer.approvals[0][2].startswith("http://127.0.0.1:8080/unsubscribe/")
     assert decide(client, "ada@example.edu", "decline").status_code == 409
     assert client.get("/v1/admin/access-requests?status=approved", headers=ADMIN).json()["requests"][0][
         "decision_reason"] == "A place opened."
@@ -164,7 +166,7 @@ def test_admins_decide_requests_with_audited_transitions(client, mailer, session
 @pytest.mark.spec("WEB-ACCESS-003")
 def test_direct_invitations_and_failed_notices_keep_the_decision(session_factory):
     class FailingMailer(CaptureMailer):
-        def send_access_approved(self, email, sign_in_url):
+        def send_access_approved(self, email, sign_in_url, unsubscribe_url):
             raise OSError("smtp unavailable")
 
     settings = Settings(jwt_secret=SECRET)

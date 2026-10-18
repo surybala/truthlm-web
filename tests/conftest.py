@@ -30,12 +30,16 @@ class CaptureMailer:
     def __init__(self):
         self.deliveries = []
         self.approvals = []
+        self.research = []
 
     def send(self, email, verify_url):
         self.deliveries.append((email, verify_url))
 
-    def send_access_approved(self, email, sign_in_url):
-        self.approvals.append((email, sign_in_url))
+    def send_access_approved(self, email, sign_in_url, unsubscribe_url):
+        self.approvals.append((email, sign_in_url, unsubscribe_url))
+
+    def send_research(self, email, message):
+        self.research.append((email, message))
 
 
 @pytest.fixture
@@ -51,7 +55,7 @@ def session_factory():
 
 @pytest.fixture
 def settings():
-    return Settings(jwt_secret=SECRET, question_limit_per_hour=5, vote_limit_per_hour=10)
+    return Settings(jwt_secret=SECRET, question_limit_per_hour=5)
 
 
 @pytest.fixture
@@ -82,7 +86,7 @@ def auth(subject="user-1", role="user"):
 def submit(client, text="Does this treatment improve outcomes across diverse adult populations?",
            subject="user-1", key="submission-key-1"):
     return client.post("/v1/questions", json={"text": text},
-                       headers={**auth(subject, "paid"), "Idempotency-Key": key})
+                       headers={**auth(subject, "editor"), "Idempotency-Key": key})
 
 
 def grant_access(client, email):
@@ -98,14 +102,6 @@ def approve(client, submission_id, *, cluster_id=None, domain="statistics", subj
         body["domain"] = domain
     return client.post(f"/v1/admin/submissions/{submission_id}/moderate", json=body,
                        headers=auth(subject, "moderator"))
-
-
-def create_cycle(client, key="2026-W40"):
-    now = datetime.now(UTC)
-    return client.post("/v1/admin/cycles", json={"cycle_key": key,
-                       "starts_at": (now - timedelta(days=1)).isoformat(),
-                       "ends_at": (now + timedelta(days=6)).isoformat()},
-                       headers=auth("admin-1", "admin"))
 
 
 def publication_bundle(slug="does-the-effect-hold", bundle_id="bundle-1", *, revision=1,

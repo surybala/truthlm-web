@@ -8,8 +8,11 @@ document.addEventListener("DOMContentLoaded", () => {
   const revoke = document.getElementById("revoke-feed");
   const result = document.getElementById("personal-feed-result");
   const personalUrl = document.getElementById("personal-feed-url");
+  const emailState = document.getElementById("email-state");
+  const emailToggle = document.getElementById("email-toggle");
   let csrfToken = "";
-  let state = {subscriptions: [], options: {domains: [], researchers: []}, personal_feed_active: false};
+  let state = {subscriptions: [], options: {domains: [], researchers: []}, personal_feed_active: false,
+               email_enabled: true};
 
   const api = async (path, options = {}) => {
     const response = await fetch(path, {...options, headers: {
@@ -71,6 +74,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!researcherOptions.children.length) addText(researcherOptions, "p", "No additional cited researchers yet.", "empty-options");
     generate.textContent = state.personal_feed_active ? "Rotate personal feed URL" : "Create personal feed URL";
     revoke.hidden = !state.personal_feed_active;
+    emailState.textContent = state.email_enabled
+      ? (state.subscriptions.length ? "New investigations that match your interests are emailed to you."
+        : "Email is on, but you follow nothing yet. Choose all research or add an interest below.")
+      : "Research emails are off. You can still read everything on the site.";
+    emailToggle.textContent = state.email_enabled ? "Stop research emails" : "Email me new research";
+    emailToggle.className = state.email_enabled ? "button quiet" : "button dark";
+    emailToggle.hidden = false;
   };
 
   const load = async () => {
@@ -103,6 +113,15 @@ document.addEventListener("DOMContentLoaded", () => {
       status.textContent = "Feed URL selected. Copy it from the field.";
     }
   }));
+
+  emailToggle.addEventListener("click", async () => {
+    try {
+      const payload = await api("/v1/subscriptions/email", {method: "PUT",
+        body: JSON.stringify({enabled: !state.email_enabled})});
+      status.textContent = payload.email_enabled ? "Research emails are on." : "Research emails are off.";
+      await load();
+    } catch (error) { showError(error); }
+  });
 
   generate.addEventListener("click", async () => {
     if (!state.subscriptions.length) {

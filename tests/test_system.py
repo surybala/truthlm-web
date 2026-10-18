@@ -32,19 +32,34 @@ def test_initial_migration_upgrades_and_downgrades(tmp_path):
     cfg = Config(str(ROOT / "alembic.ini"))
     cfg.set_main_option("script_location", str(ROOT / "migrations"))
     cfg.set_main_option("sqlalchemy.url", f"sqlite:///{db}")
-    command.upgrade(cfg, "head")
+    command.upgrade(cfg, "20260928_0008")
     engine = __import__("sqlalchemy").create_engine(f"sqlite:///{db}")
+    with engine.begin() as connection:
+        connection.exec_driver_sql(
+            "INSERT INTO users (id, external_subject, email, role, voting_eligible, created_at) "
+            "VALUES ('u-paid', 'email:paid@example.org', 'paid@example.org', 'paid', 1, "
+            "'2026-09-28 00:00:00')")
+    command.upgrade(cfg, "head")
+    with engine.connect() as connection:
+        assert connection.exec_driver_sql("SELECT role FROM users WHERE id = 'u-paid'").scalar() == "user"
     tables = set(inspect(engine).get_table_names())
-    assert {"users", "question_submissions", "question_clusters", "cluster_memberships", "votes",
-            "weekly_cycles", "readiness_assessments", "metrics_snapshots", "publication_bundles",
+    assert {"users", "question_submissions", "question_clusters", "cluster_memberships",
+            "readiness_assessments", "metrics_snapshots", "publication_bundles",
             "articles", "article_revisions", "audit_events", "magic_link_tokens",
             "browser_sessions", "question_reports", "research_subscriptions",
-            "feed_access_tokens", "access_requests", "cycle_selections"} <= tables
+            "feed_access_tokens", "access_requests", "email_deliveries"} <= tables
+    assert not {"votes", "weekly_cycles", "cycle_selections"} & tables
     inspector = inspect(engine)
-    assert "winner_cluster_id" not in {column["name"] for column in inspector.get_columns("weekly_cycles")}
+    users = {column["name"] for column in inspector.get_columns("users")}
+    assert "email_opt_out_at" in users and "voting_eligible" not in users
+    submissions = {column["name"] for column in inspector.get_columns("question_submissions")}
+    assert not {"answer", "answered_at"} & submissions
     assert "domain" in {column["name"] for column in inspector.get_columns("question_clusters")}
-    open_cycle = {index["name"]: index for index in inspector.get_indexes("weekly_cycles")}["uq_one_open_cycle"]
-    assert open_cycle["unique"]
+    unique = {tuple(item["column_names"]) for item in inspector.get_unique_constraints("email_deliveries")}
+    assert ("user_id", "article_id") in unique
+    command.downgrade(cfg, "20260928_0008")
+    restored = set(inspect(engine).get_table_names())
+    assert {"votes", "weekly_cycles", "cycle_selections"} <= restored and "email_deliveries" not in restored
     with engine.connect() as connection:
         ddl = connection.exec_driver_sql(
             "SELECT sql FROM sqlite_master WHERE name = 'uq_one_open_cycle'").scalar()
@@ -117,6 +132,9 @@ def test_production_configuration_rejects_unsafe_defaults():
         Settings(question_limit_per_hour=0).validate()
     with pytest.raises(ValueError, match="rate limits"):
         Settings(access_request_limit_per_hour=0).validate()
+    for size in (0, 1001):
+        with pytest.raises(ValueError, match="delivery batch"):
+            Settings(delivery_batch_size=size).validate()
     with pytest.raises(ValueError, match="access mode"):
         Settings(access_mode="public").validate()
     for domains in ((), ("Economics", "economics"), ("!!!",), ("Unassigned",), ("x" * 65,)):
@@ -124,8 +142,10 @@ def test_production_configuration_rejects_unsafe_defaults():
             Settings(domains=domains).validate()
 
 
-@pytest.mark.spec("WEB-Q-006", "WEB-ACCESS-001")
+@pytest.mark.spec("WEB-Q-006", "WEB-ACCESS-001", "WEB-MAIL-003")
 def test_access_mode_and_domains_are_read_from_the_environment(monkeypatch):
+    monkeypatch.setenv("ORL_WEB_DELIVERY_BATCH_SIZE", "25")
+    assert Settings.from_env().delivery_batch_size == 25
     monkeypatch.setenv("ORL_WEB_ACCESS_MODE", " Open ")
     monkeypatch.setenv("ORL_WEB_DOMAINS", "Physics, Materials  Science,,Physics")
     monkeypatch.setenv("ORL_WEB_ACCESS_REQUEST_LIMIT_PER_HOUR", "7")
@@ -133,4 +153,5 @@ def test_access_mode_and_domains_are_read_from_the_environment(monkeypatch):
     assert settings.access_mode == "open" and settings.access_request_limit_per_hour == 7
     assert settings.domain_labels == {"physics": "Physics", "materials-science": "Materials Science"}
     monkeypatch.delenv("ORL_WEB_DOMAINS")
-    assert list(Settings.from_env().domain_labels) == ["economics", "finance", "mathematics", "statistics"]
+    assert list(Settings.from_env().domain_labels) == [
+        "biology", "chemistry", "economics", "finance", "mathematics", "physics", "statistics"]

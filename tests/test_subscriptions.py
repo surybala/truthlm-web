@@ -76,7 +76,7 @@ def test_public_research_feed_is_valid_cacheable_and_contains_only_public_work(
     assert [category.text for category in latest.findall("category")] == ["Economics"]
 
 
-@pytest.mark.spec("WEB-SUB-001", "WEB-SUB-002")
+@pytest.mark.spec("WEB-SUB-001", "WEB-SUB-002", "WEB-MAIL-001")
 def test_personal_feed_matches_interests_and_supports_rotation_and_revocation(
         client, mailer, session_factory):
     publish(client, session_factory, bundle_id="bundle-med", slug="medicine-evidence",
@@ -93,6 +93,13 @@ def test_personal_feed_matches_interests_and_supports_rotation_and_revocation(
     page = client.get("/subscriptions")
     assert page.status_code == 200 and "Personal research feed" in page.text
     state = client.get("/v1/subscriptions").json()
+    assert [(item["kind"], item["value"]) for item in state["subscriptions"]] == [
+        ("all", "All weekly research")]
+    assert state["email_enabled"] is True
+    assert client.delete(f"/v1/subscriptions/items/{state['subscriptions'][0]['subscription_id']}",
+                         headers=headers).status_code == 204
+    state = client.get("/v1/subscriptions").json()
+    assert state["subscriptions"] == []
     assert state["options"]["domains"] == ["medicine", "physics"]
     assert {"Ada Researcher", "Nia Scientist"} <= set(state["options"]["researchers"])
     assert client.post("/v1/subscriptions", json={"kind": "domain", "value": "medicine"}).status_code == 403

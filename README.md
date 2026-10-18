@@ -3,27 +3,28 @@
 The independently deployable public service behind `truthlm.com`. TruthLM is a thought assistant
 for students and researchers, not an answer engine: it publishes weekly investigations that show how
 a question was scoped, what the evidence shows, which numbers were reproduced, where experts
-disagree, and what remains open. Anyone can read the investigations and the method. During early
-access, only invited members can submit questions (each reviewed by a person before anyone else sees
-it) and upvote approved questions within each research domain. It is deliberately not a social
-network: there are no public profiles, feeds, comments, or public vote counts.
+disagree, and what remains open. It is deliberately not a social network: there are no public
+profiles, feeds, comments, or votes.
 
-The service hosts the publication experience, the invite-only membership list, question review,
-manual grouping, weekly per-domain selection, research-readiness labels, and sanitized Core
-metrics. It never imports ORL Core, opens the Core catalog, or connects to its vector store.
+## Access model
 
-## Launch posture and north star
+TruthLM has two access levels:
 
-V1 opens to a small set of selected researchers who establish the queue with strong research
-questions. Every submission receives the same moderation, readiness, evidence, and editorial
-scrutiny. The initial investigations are intended to make the product concrete and attract more
-researchers.
+1. **Read.** Every investigation, the method, the archive, and the public RSS feed are open to
+   everyone without an account.
+2. **Subscribe and receive.** Subscribers receive new investigations by email and choose the domains
+   and cited researchers they follow. While `ORL_WEB_ACCESS_MODE=invite`, people join a waitlist and
+   an administrator approves addresses in batches; approval starts the subscription. Set the mode to
+   `open` when anyone may subscribe by signing in with their email.
 
-The product north star is broader: a researcher-owned private investigation workspace where a user
-can explicitly run a metered asynchronous Core job, keep its result private, or submit a finished
-article for publication. Browsers will not call Core directly. Web will mediate authorization,
-quotas, job state, private ownership, and publication while Core remains isolated behind authenticated
-versioned jobs. That lifecycle is not part of the V1 launch contract.
+The editorial team chooses the questions. At launch only editors and administrators submit them, and
+the team publishes at most one investigation per research domain each week after a manual review.
+The service covers seven domains by default: Biology, Chemistry, Economics, Finance, Mathematics,
+Physics, and Statistics.
+
+The service hosts the publication experience, the waitlist and subscriber list, email delivery,
+question review, research-readiness labels, and sanitized Core metrics. It never imports ORL Core,
+opens the Core catalog, or connects to its vector store.
 
 ## Local setup
 
@@ -49,8 +50,8 @@ secret of at least 32 characters. Members authenticate with a short-lived, singl
 `ORL_WEB_ACCESS_MODE=invite` (the default) sends links only to approved addresses, bootstrap
 admins/editors, and elevated accounts; set it to `open` to admit everyone except revoked addresses.
 `ORL_WEB_DOMAINS` lists the research domains questions may belong to (default
-`Economics,Finance,Mathematics,Statistics`); add a domain only when the consortium has an expert for
-it. The browser receives an opaque, revocable server-side session in an HttpOnly, Secure,
+`Biology,Chemistry,Economics,Finance,Mathematics,Physics,Statistics`); add a domain only when the
+consortium has an expert for it. The browser receives an opaque, revocable server-side session in an HttpOnly, Secure,
 SameSite cookie; state-changing browser requests also require a session-bound CSRF token. Only
 token hashes are persisted. Configure initial elevated accounts with `ORL_WEB_ADMIN_EMAILS` and
 `ORL_WEB_EDITOR_EMAILS`; later role changes should be made through controlled administration.
@@ -62,56 +63,63 @@ requests.
 
 Public pages:
 
-- `/` explains TruthLM as a thought assistant and presents three access levels: open article
-  reading, signed-in research subscriptions, and an access request for paid private research. It
-  also lists the latest investigations.
-- `/join` is the standalone invitation request page.
+- `/` explains TruthLM as a thought assistant, presents the two access levels, and lists the latest
+  investigations. While access is invite-only it carries the waitlist form.
+- `/join` is the standalone waitlist page (or, in `open` mode, the subscribe page).
 - `/research` provides a searchable archive of published investigations.
 - `/research/{slug}` renders the findings with their open questions and limitations, the structured
   research record, evidence map, and bibliography, plus share links (LinkedIn, X, Bluesky, Facebook,
   Reddit, email, copy link, native share) and Open Graph/Twitter card metadata.
-- `/method` presents the seven questions with prompts readers can apply themselves, the public
-  record, and how questions are selected.
-
-Member pages:
-
-- `/questions` (members only) provides question submission with review guidance and an optional
-  domain, the queue grouped by domain and ranked by upvotes, readiness filtering, duplicate hints,
-  review decisions with reviewer notes, and question flagging.
-- `/subscriptions` lets a signed-in user follow all research or selected domains and cited
-  researchers, then create or rotate a private RSS URL.
-- `/moderation` is the review console for moderators and administrators: approve, attach, or decline
-  pending questions; resolve flags; and, for administrators, decide invitation requests, invite
-  addresses directly, and open or close weekly cycles.
-- `/feeds/research.xml` is the public RSS 2.0 feed for every published investigation. Personal feed
-  URLs are issued from the subscriptions page and can be polled without a browser session.
+- `/method` presents the seven questions with prompts readers can apply themselves and the public
+  record.
+- `/feeds/research.xml` is the public RSS 2.0 feed for every published investigation.
+- `/unsubscribe/{user_id}/{signature}` is the signed link every research email carries; it stops
+  research emails without signing in and accepts one-click unsubscribe requests from mail providers.
 - `/login` requests a passwordless sign-in link without revealing whether an account exists.
-- `/editor` loads the editorial queue for an editor or administrator browser session.
 - `/docs` exposes the API reference.
 
-## Initial workflow
+Subscriber and staff pages:
 
-1. A visitor requests an invitation at `/join` (or an administrator invites an address directly).
-   An administrator approves it in `/moderation`; the person is emailed a sign-in pointer.
-2. A member submits a question with an `Idempotency-Key` header, optionally suggesting a domain.
-3. A moderator approves it into a new cluster with a domain, attaches it to an existing cluster, or
-   declines it with a reason the member sees (for example, questions a lookup can answer).
-4. An administrator opens a weekly cycle; members upvote approved questions.
-5. An editor records a manual readiness assessment when needed.
-6. An administrator closes the cycle. The service stores a per-domain vote snapshot, selects the
-   most-upvoted question in each domain (at least one upvote, overrides need a reason), and emits one
-   validated research-request payload per selection for ORL Core.
-7. A service or administrator imports a checksummed Core metrics snapshot. Public clients read only
-   the latest persisted snapshot.
-8. ORL Core submits a checksummed `publication-bundle` to `POST /v1/admin/publications`. The service
+- `/subscriptions` lets a subscriber turn research emails off or on, follow all research or selected
+  domains and cited researchers, and create or rotate a private RSS URL that uses the same interests.
+- `/questions` (editors and administrators) submits research questions, lists approved questions by
+  domain with their cluster IDs, and shows your submissions' moderation state.
+- `/moderation` is the review console for moderators and administrators: approve, attach, or decline
+  pending questions; resolve flags; and, for administrators, approve waitlist requests in batches and
+  invite addresses directly.
+- `/editor` is the editorial workspace: review and publish drafts, retract or correct publications,
+  and email new research to subscribers.
+
+## Weekly workflow
+
+1. Someone joins the waitlist at `/join`. An administrator approves the address in `/moderation` (or
+   invites it directly). Approval creates the subscriber's account, which follows all weekly research
+   by default, and emails a welcome notice with a sign-in link and an unsubscribe link.
+2. An editor or administrator submits a question at `/questions` with an `Idempotency-Key` header,
+   optionally suggesting one of the configured domains.
+3. A moderator approves it into a new question cluster with a domain, attaches it to an existing
+   cluster, or declines it with a reason the submitter sees. Approval returns the cluster ID.
+4. An editor records a manual readiness assessment when needed.
+5. The operator runs ORL Core on the question and builds the publication bundle with
+   `--cluster-id <cluster ID>`, so the investigation carries the question's domain.
+6. ORL Core submits the checksummed `publication-bundle` to `POST /v1/admin/publications`. The service
    validates all evidence references and requires passed citation-support, originality, copyright,
    equation, and quantitative gates before creating a draft.
-9. An editor or administrator publishes the reviewed draft with
-   `POST /v1/admin/publications/{bundle_id}/publish`. Only then does it appear on public pages and in
-   `GET /v1/articles`.
-10. A corrected bundle increments `revision`, identifies `supersedes_bundle_id`, and explains the
-   correction. Publishing it supersedes the prior public revision without deleting it. Editors may
-   reject drafts or retract the current publication only with an audited reason.
+7. After the manual review, an editor publishes the draft with
+   `POST /v1/admin/publications/{bundle_id}/publish`. Only then does it appear on public pages, the
+   RSS feed, and `GET /v1/articles`. Publishing never emails anyone by itself.
+8. Once the week's investigations are published (at most one per domain), an editor presses
+   **Email new research to subscribers** in `/editor`. That repeats
+   `POST /v1/admin/deliveries/run` until no subscribers remain: each subscriber receives one email
+   listing the new investigations that match their interests, never the same investigation twice.
+   `GET /v1/admin/deliveries` reports subscribers, sent, failed, and interrupted deliveries.
+9. A corrected bundle increments `revision`, identifies `supersedes_bundle_id`, and explains the
+   correction. Publishing it supersedes the prior public revision without deleting it, and it is not
+   emailed again. Editors may reject drafts or retract the current publication only with an audited
+   reason; a retracted investigation is never emailed.
+
+A service or administrator can also import a checksummed Core metrics snapshot. Public clients read
+only the latest persisted snapshot.
 
 Publication bundles contain an answer and a structured public research record: scope, assumptions,
 methodology, expert contributions, chronological research actions, claim-to-source mappings,
@@ -131,11 +139,23 @@ Run `pytest` for the independent requirement, API, contract, and migration suite
   rate-limited per normalized email address. Responses remain neutral after the limit is reached.
 - Sessions expire after `ORL_WEB_SESSION_DAYS`. Sign-out revokes the server record immediately and
   clears the cookie. Rotate `ORL_WEB_JWT_SECRET` only with a planned invalidation of existing browser
-  CSRF proofs and service JWTs.
-- Development `console` delivery writes the sign-in URL to the `orl_web.auth` logger. Never use it in
-  production. Production validation requires `smtp`, a host, a from address, PostgreSQL, and HTTPS.
+  CSRF proofs, service JWTs, and the unsubscribe links in emails already sent.
+- Development `console` delivery writes sign-in URLs and research email subjects to the
+  `orl_web.auth` logger. Never use it in production. Production validation requires `smtp`, a host,
+  a from address, PostgreSQL, and HTTPS.
 - SMTP credentials belong in the deployment secret store. Database backups contain email addresses
   and credential hashes and must be handled as sensitive data.
 - Personal RSS URLs are shown only when created or rotated. Reverse proxies and analytics must redact
   `/feeds/personal/*` paths because the URL contains the reader credential. The database retains only
   a hash, and revocation or rotation invalidates the prior URL immediately.
+
+## Email delivery operations
+
+- Send through an email provider's SMTP endpoint (for example Amazon SES, Postmark, or Resend) with
+  SPF, DKIM, and DMARC configured for the sender domain. Research emails carry `List-Unsubscribe` and
+  one-click `List-Unsubscribe-Post` headers, which Gmail and Yahoo expect from bulk senders.
+- Approving waitlist addresses in batches warms a new sending domain gradually.
+- `ORL_WEB_DELIVERY_BATCH_SIZE` (default 50) caps the subscribers emailed per run. A failed email is
+  retried on later runs, at most three attempts in total. A delivery interrupted mid-send stays
+  `sending` and is never retried automatically, so nobody is emailed twice; check it with
+  `GET /v1/admin/deliveries` and the provider's logs.

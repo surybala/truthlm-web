@@ -3,24 +3,17 @@
 ## Service boundary
 
 - **WEB-ARCH-001** ORL Web shall run as an independently packaged service and shall not import ORL Core code or access Core persistence.
-- **WEB-CONTRACT-001** Imported Core artifacts and emitted research requests shall satisfy vendored v1 JSON Schemas, and checksummed artifacts shall be verified before persistence.
+- **WEB-CONTRACT-001** Imported Core artifacts and recorded readiness assessments shall satisfy vendored v1 JSON Schemas, and checksummed artifacts shall be verified before persistence.
 
 ## Questions and moderation
 
-- **WEB-Q-001** Question submission shall require an authenticated user, enforce input and per-user rate limits, retain the original text, and support idempotent replay.
-- **WEB-Q-002** The question queue shall be visible only to signed-in members, grouped by research domain and ranked within each domain by current-cycle votes, and shall support search, domain and readiness filtering, cycle status, and viewer-specific vote state without conflating votes with research readiness.
+- **WEB-Q-001** Question submission shall require an editor or administrator, enforce input and per-user rate limits, retain the original text, and support idempotent replay.
+- **WEB-Q-002** The question list shall be visible only to signed-in members, never to the public, grouped by research domain in configured order and listed oldest first within each domain with its status and readiness. The question workspace page shall be available only to editors and administrators; other members are sent to their subscriptions.
 - **WEB-Q-003** An authenticated user shall be able to inspect their submission moderation history and idempotently report a public question for moderator review with a bounded reason.
 - **WEB-Q-004** A moderator shall be able to list pending submissions and reported questions, then resolve or dismiss each report exactly once with an audited reason.
 - **WEB-Q-005** A moderator shall be able to reject a pending submission, approve it into a new cluster, or attach it to an existing open cluster with a recorded reason and immutable audit event. No submission is visible to other members before approval, and a rejection reason is shown to its submitter.
 - **WEB-Q-006** Every approved question shall belong to one research domain from the configured list: submitters may suggest a domain, moderators assign it when approving a new cluster, attached submissions inherit their cluster's domain, and unknown domains are rejected.
-- **WEB-MOD-001** Moderators and administrators shall have a role-gated review console to approve, attach, or decline pending questions and to resolve reports; administrators shall additionally manage invitation requests, members, and weekly cycles there. Hiding a control is never the authorization decision.
-
-## Voting and cycles
-
-- **WEB-DATA-002** Votes shall target question clusters and enforce at most one active vote per eligible user, cluster, and weekly cycle.
-- **WEB-VOTE-005** Vote creation and removal shall be idempotent and transactionally update the authoritative database and audit trail.
-- **WEB-CYCLE-001** Freezing a weekly cycle shall atomically store one reproducible per-domain vote snapshot and select at most one winner per research domain: the open question with the most votes (at least one), then the earliest creation time and stable ID. Each winner is stored under a database uniqueness constraint and emits a schema-valid research request.
-- **WEB-CYCLE-002** A manual winner override shall require an authorized actor and reason, replace the selection of at most one question per domain, and be retained in the immutable audit trail and vote snapshot.
+- **WEB-MOD-001** Moderators and administrators shall have a role-gated review console to approve, attach, or decline pending questions and to resolve reports; administrators shall additionally manage invitation requests and members there. Hiding a control is never the authorization decision.
 
 ## Readiness and metrics
 
@@ -29,7 +22,7 @@
 
 ## Publication and public experience
 
-- **WEB-UI-001** The public home, method, archive, and article pages shall present TruthLM as a thought assistant for students and researchers rather than a quick-answer service; the home page shall distinguish three simple access levels: open article reading, authenticated research subscriptions, and access-request based paid private research; the method shall present the questions an investigation asks; published investigations shall remain browsable without authentication; and the public shall never see the members' question queue or vote counts.
+- **WEB-UI-001** The public home, method, archive, and article pages shall present TruthLM as a thought assistant for students and researchers rather than a quick-answer service; the home page shall present exactly two access levels: reading every investigation and the method without an account, and an email subscription to new investigations that begins on the waitlist while access is invite-only; the method shall present the questions an investigation asks; published investigations shall remain browsable without authentication; and the public shall never see the question list or member data.
 - **WEB-UI-002** Published investigations shall be shareable without third-party scripts: every article page shall declare its canonical URL and Open Graph and Twitter card metadata and offer share links for common social networks and email, plus copy-link and native device sharing.
 - **WEB-UI-003** The reader view of every published investigation shall surface its open questions and material limitations beside the findings, so an article ends in further inquiry rather than a final verdict.
 - **WEB-PUB-001** Web shall idempotently accept a publication bundle as a draft only after schema, checksum, citation-reference, research-review, originality, copyright, citation-support, equation, and quantitative gates pass; editorial approval shall be a separate authenticated action.
@@ -42,6 +35,13 @@
 - **WEB-SUB-001** Authenticated users shall be able to follow all weekly research or any combination of normalized domains and cited researchers; a personal feed shall include a publication once when any selected interest matches.
 - **WEB-SUB-002** Personal RSS access shall use a high-entropy credential stored only as a hash and shall support immediate rotation and revocation without using the browser session in an RSS reader.
 
+## Email delivery
+
+- **WEB-MAIL-001** Approving or directly inviting an address, and a first sign-in while access is open, shall make the address an email subscriber: its member account is created if absent with the role its bootstrap lists grant, it follows all weekly research by default, and the approval notice carries a sign-in link and an unsubscribe link.
+- **WEB-MAIL-002** An editor, administrator, or service client shall be able to run an email delivery that sends each eligible subscriber at most one email listing every current published investigation that matches the subscriber's interests, was first published after the subscriber's current email subscription began, and was never emailed to that subscriber before. Eligible subscribers have a non-revoked account with access and have not unsubscribed. No investigation is emailed to the same subscriber twice, including after a correction, and retracted investigations are never sent.
+- **WEB-MAIL-003** Delivery runs shall be bounded and resumable: a run emails at most the configured or requested number of subscribers, records each delivery as sent, failed, or skipped with its attempt count, retries a failed delivery at most three times in total, never resends a delivery whose send was interrupted, and reports how many subscribers remain. Delivery status and the run action shall be available only to editors, administrators, and service clients.
+- **WEB-MAIL-004** Every research email shall carry a visible unsubscribe link plus `List-Unsubscribe` and one-click `List-Unsubscribe-Post` headers, signed for that subscriber. Using the link stops further deliveries without signing in, reveals no account details, and rejects invalid signatures. A signed-in member shall be able to turn email delivery off and on from the subscriptions page.
+
 ## Membership and access
 
 - **WEB-ACCESS-001** While the access mode is `invite`, sign-in links shall be issued and honored only for addresses that are approved, bootstrap-elevated, or held by an elevated account. Every other address receives the same neutral response, and a revoked address stays blocked in every access mode except bootstrap elevation.
@@ -52,19 +52,35 @@
 
 - **WEB-AUTH-001** Browser authentication shall use rate-limited, short-lived, single-use email links and opaque server-side sessions whose raw credentials are never persisted.
 - **WEB-AUTH-002** Browser sessions shall be revocable, carried in HttpOnly SameSite cookies, and require a session-bound CSRF proof for state-changing requests while preserving signed bearer authentication for service clients.
-- **WEB-SEC-001** Question and vote mutations shall require valid authentication, bounded input, eligibility checks, rate limits, and audit events.
+- **WEB-SEC-001** Question mutations shall require valid authentication, bounded input, role checks, rate limits, and audit events.
 - **WEB-SEC-002** Moderator, editor, administrator, and service operations shall be separated by signed role claims, and sensitive mutations shall emit immutable audit events.
 - **WEB-OPS-001** The PostgreSQL-oriented schema shall be reproducibly installable through a versioned migration with database and application protections for immutable records.
 - **WEB-OPS-002** The service and its migrations shall load local configuration from the project's `.env` file without overriding variables already set in the environment, and the test suite shall neither read that file nor inherit `ORL_WEB_*` variables from the developer's shell.
 
-## Authentication and question-queue design
+## Access model
+
+TruthLM has two access levels:
+
+1. **Read.** Every published investigation, the method, the archive, and the public RSS feed are
+   open to everyone without an account.
+2. **Subscribe and receive.** A subscriber receives new investigations by email and can choose the
+   domains and cited researchers they follow. While `ORL_WEB_ACCESS_MODE=invite`, people join a
+   waitlist and administrators approve addresses gradually; approval is what starts the
+   subscription. Switching to `open` lets anyone subscribe by signing in with their email.
+
+There is no paid tier and no member voting. The owners choose the research questions: at launch only
+editors and administrators submit questions, and the editorial team publishes at most one
+investigation per research domain each week after a manual review.
+
+## Authentication and question workflow
 
 ### Trust boundaries
 
 Public browser users authenticate directly with ORL Web. Their email address, session, submission
-history, votes, and reports remain in the Web database. ORL Core receives only a selected cluster ID,
-canonical question, revision, cycle, and idempotency key. Core and trusted operational clients retain
-the signed bearer-token path; browser sessions do not replace service authentication.
+history, subscriptions, deliveries, and reports remain in the Web database. ORL Core receives only a
+question cluster ID, canonical question, and revision, which an operator passes to a Core run. Core
+and trusted operational clients retain the signed bearer-token path; browser sessions do not replace
+service authentication.
 
 ### Passwordless authentication
 
@@ -89,21 +105,19 @@ SMTP is the required production delivery adapter. Console delivery exists only f
 development. Production startup rejects SQLite, HTTP base URLs, the development signing secret, or
 missing SMTP configuration. Elevated bootstrap email lists apply only when a user is first created.
 
-### Member queue behavior
+### Question workflow
 
-`GET /v1/questions` requires a signed-in member and returns open or selected clusters, their
-canonical text, research domain, tags, cycle-scoped vote totals, rank within the domain, readiness
-assessment, and a viewer-specific `viewer_has_voted` boolean. Votes and readiness are rendered as
-independent signals. The queue supports local text search, domain filtering, and readiness filtering
-without changing server truth. The public never sees the queue or vote counts: published
-investigations are the only public output of the question process.
+An editor or administrator submits a question at `/questions` with an optional suggested domain. A
+moderator or administrator approves it in the review console, choosing the final wording and domain
+(or attaching it to an existing open question). The approval returns the cluster ID that the
+operator passes to `orl platform publication build --cluster-id`, so the published investigation
+inherits the question's domain for feeds and email matching.
 
-Authenticated users may submit bounded questions with an idempotency key, toggle one vote per
-cluster in the active weekly cycle, read their own submission and moderation history, and submit one
-idempotent report per question. Reports contain a controlled reason and bounded optional detail;
-they produce immutable audit events but never alter vote totals. Before submission, the browser
-offers lexical duplicate guidance against the current public queue. This is advisory only: manual
-moderation remains authoritative until semantic clustering is implemented.
+`GET /v1/questions` requires a signed-in member and returns open or selected clusters with their
+canonical text, research domain, tags, status, and readiness assessment, grouped by domain in the
+configured order and oldest first within each domain. The public never sees the list. Members may
+report a question they can see; reports produce immutable audit events and are resolved in the
+review console.
 
 ### Operational invariants
 
@@ -115,8 +129,8 @@ moderation remains authoritative until semantic clustering is implemented.
   authorization decision.
 - Rate-limit counters are authoritative database records in this milestone. Multi-instance
   deployments therefore share limits without process-local state.
-- Login and question responses avoid executable user content; dynamic queue content is inserted with
-  DOM `textContent`, and the site Content Security Policy disallows inline script execution.
+- Login and question responses avoid executable user content; dynamic content is inserted with DOM
+  `textContent`, and the site Content Security Policy disallows inline script execution.
 
 ## Research feed and subscription design
 
@@ -142,8 +156,9 @@ system:
 - `researcher` values match normalized author names in that investigation's citations.
 
 Normalization applies Unicode NFKC, whitespace folding, and case-insensitive comparison. A personal
-feed uses OR semantics across its preferences and emits each matching article once. Users may add a
-value before it appears in the published option list so a feed can begin matching future work.
+feed and an email delivery use OR semantics across the subscriber's preferences and include each
+matching article once. Users may add a value before it appears in the published option list so their
+subscription can begin matching future work.
 
 ### Personal feed access
 
@@ -157,20 +172,62 @@ interests. It must be treated as a secret by application logs, analytics, revers
 tools, and users. Browser session cookies are never accepted as a substitute for a personal feed
 credential. Feed polling updates `last_used_at` at most once per day to avoid a write on every poll.
 
-## Positioning, membership, and domain design
+## Email delivery design
 
-### V1 launch cohort
+### Subscribers
 
-V1 is a curated, invite-only launch for selected researchers. They establish the question queue with
-high-quality, researchable questions so the first public investigations demonstrate the product to
-prospective researchers. Every submission receives the same moderation, readiness, research, and
-editorial review and cannot bypass publication gates.
+A subscriber is a member account with an email address. Approving a waitlist request or inviting an
+address directly creates the account immediately, so approved people receive research without ever
+signing in; in `open` mode the first sign-in creates it. New accounts follow `all` weekly research,
+and the member can narrow that to domains or researchers at `/subscriptions`. Bootstrap admin and
+editor addresses keep their elevated role when an approval creates their account. Each delivery run
+also creates accounts for approved addresses that predate this rule.
 
-The future product direction is a user-owned private investigation workspace with optional,
-explicit publication and metered asynchronous Core research. V1 does not expose direct Core access
-or yet promise that lifecycle. At launch, a member's submitted question remains private until
-moderation approves it into the member queue; only selected questions that complete research and
-editorial review become public investigations.
+A subscriber is eligible while their address still has access (approved, elevated, or any
+non-revoked address in `open` mode) and `email_opt_out_at` is empty.
+
+### Runs
+
+`POST /v1/admin/deliveries/run` (editor, administrator, or service) performs one bounded run:
+
+1. **Queue.** For each eligible subscriber, add one `email_deliveries` row per current published
+   investigation that matches their interests, was first published at or after the subscriber's
+   current email subscription began (`email_subscribed_at`: account creation, or the moment they
+   last turned email back on), and has no row for that subscriber yet. A returning subscriber is
+   therefore not sent what was published while they were unsubscribed. `(user_id, article_id)` is unique, so a
+   corrected revision, which keeps its article, is never queued twice.
+2. **Send.** Pick at most `limit` subscribers (default `ORL_WEB_DELIVERY_BATCH_SIZE`, 50) with
+   pending rows or failed rows below three attempts. Rows for a subscriber who unsubscribed or lost
+   access, or for an investigation that is no longer published, become `skipped`. The remaining rows
+   are committed as `sending` with an incremented attempt count before the email is handed to the
+   mailer, then become `sent` or `failed`. One email lists all of a subscriber's rows.
+3. **Report.** The response counts queued rows, emails sent, emails failed, skipped rows, and the
+   subscribers that still have deliverable rows. Editors repeat the run until nothing remains.
+
+A crash between handing an email to the mailer and recording the outcome leaves rows in `sending`.
+Those rows are never retried automatically, so a subscriber is never emailed twice for the same
+investigation; editors can inspect them in `GET /v1/admin/deliveries`.
+
+The editorial workspace shows the delivery status and runs deliveries in batches until none remain.
+Publishing does not email anyone by itself, so the editorial team can publish the week's
+investigations and send one email containing them.
+
+### Messages and unsubscribe
+
+Each research email lists the new investigations with their domains, summary, and canonical URL,
+explains that investigations are researched by AI agents and reviewed by a person before
+publication, links to `/subscriptions` to change interests, and carries an unsubscribe link. The link
+is `/unsubscribe/{user_id}/{signature}`, where the signature is an HMAC-SHA256 of the user ID under the
+service secret; rotating the secret invalidates previously sent links. `GET` shows a confirmation
+page, and `POST` (including the RFC 8058 one-click request a mail provider sends) sets
+`email_opt_out_at` and records an audit event. Invalid signatures receive the same not-found page.
+`PUT /v1/subscriptions/email` lets a signed-in member turn delivery off or back on.
+
+Production delivery should use an email provider's SMTP endpoint with SPF, DKIM, and DMARC
+configured for the sending domain. Approving waitlist addresses in batches also warms the sending
+domain gradually.
+
+## Positioning and domains
 
 ### Positioning
 
@@ -182,8 +239,7 @@ would change the conclusion, and what to investigate next) so readers can apply 
 Article pages keep the open questions and limitations beside the findings.
 
 The site is deliberately not a social network: there are no public profiles, followers, feeds of
-member activity, comments, or public vote counts. Members interact only by asking questions and
-upvoting approved ones; everyone else reads published investigations and the method.
+member activity, comments, votes, or public counts of members.
 
 ### Invite-only access
 
@@ -204,21 +260,20 @@ Administrators decide requests through `POST /v1/admin/access-requests/{id}/deci
 `POST /v1/admin/access`. Valid transitions are pending → approved or declined, declined → approved,
 approved → revoked, and revoked → approved; repeating the current state is an idempotent replay.
 Revocation revokes every active browser session of the matching account. Approval commits first and
-then emails a sign-in pointer; the response reports whether delivery succeeded. Accounts that existed
-before invite-only access were grandfathered as approved by the migration and can be revoked.
+then emails a welcome notice with a sign-in link and an unsubscribe link; the response reports
+whether delivery succeeded. Accounts that existed before invite-only access were grandfathered as
+approved by the migration and can be revoked.
 
-### Domains and weekly selection
+### Domains and cadence
 
-`ORL_WEB_DOMAINS` lists the research domains TruthLM currently covers (default Economics, Finance,
-Mathematics, Statistics). Only listed domains are accepted, so members cannot ask for research in a
-field the consortium has no expert for. A submitter may suggest a domain; the moderator's choice at
+`ORL_WEB_DOMAINS` lists the research domains TruthLM covers. The default is the seven domains ORL
+Core has experts for: Biology, Chemistry, Economics, Finance, Mathematics, Physics, and Statistics.
+Only listed domains are accepted. A submitter may suggest a domain; the moderator's choice at
 approval is authoritative. Clusters created before domains existed form an `unassigned` group.
 
-Freezing a cycle ranks open clusters within each domain by votes, then creation time, then ID, and
-selects the leader of every domain whose leader has at least one vote. An administrator may override
-at most one selection per domain with a reason. Each selection is stored in `cycle_selections`, which
-is unique per cycle and domain and per cycle and cluster, and yields its own research request with
-`request_id` `weekly-{cycle}-{domain}`. Selected clusters leave the open queue.
+The editorial cadence is at most one investigation per domain per week, reviewed manually before
+publication. Subscribers who follow everything receive up to seven investigations in one weekly
+email when the editors run a single delivery after publishing the week's work.
 
 ### Sharing
 

@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}Research emails — TruthLM{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block content %}
+<section class="login-band">
+  <div class="login-layout">
+    <div>
+      <p class="eyebrow">Research emails</p>
+      {% if unsubscribed %}
+      <h1>You are unsubscribed</h1>
+      <p>TruthLM will not email you new investigations. Everything we publish stays open to read at <a href="/research">the archive</a>, and you can sign in to turn emails back on at any time.</p>
+      {% else %}
+      <h1>Unsubscribe from TruthLM research emails?</h1>
+      <p>You will stop receiving new investigations by email. Everything we publish stays open to read without an account.</p>
+      {% endif %}
+    </div>
+    {% if not unsubscribed %}
+    <form class="login-form" method="post" action="{{ action }}">
+      <button class="button dark" type="submit">Unsubscribe</button>
+    </form>
+    {% endif %}
+  </div>
+</section>
+{% endblock %}

@@ -27,12 +27,15 @@ def test_public_home_and_method_explain_transparent_research(client):
                      "Multi-round expert review", "Repeat until material issues are resolved",
                      "Expert-reviewed answer",
                      'aria-label="Pause animation"',
-                     "Join the waitlist", 'id="join-form"'):
+                     "Join the waitlist", 'id="join-form"',
+                     "Every investigation and the method, open to everyone without an account.",
+                     "New investigations by email"):
         assert expected in home.text
     for removed in ("Seven questions every investigation must answer", "Who it is for",
                     "not a social network", "Read openly. Join when you are ready.",
-                    "Whitelisted account"):
+                    "Whitelisted account", "Private research", "private research"):
         assert removed not in home.text
+    assert "paid" not in home.text.lower()
     assert "TruthLM · A thought assistant for students and researchers" not in home.text
     for removed_badge in (">RD<", ">D<", ">E<", ">Q<", ">AI<"):
         assert removed_badge not in home.text
@@ -302,14 +305,15 @@ def test_review_console_is_role_gated(session_factory):
         console = client.get("/moderation").text
         assert "Questions awaiting review" in console and "Flagged questions" in console
         assert "Invitation requests" not in console and "Weekly cycle" not in console
+        assert "upvote" not in console.lower()
         assert 'href="/moderation"' in client.get("/").text
         assert client.get("/v1/admin/submissions").status_code == 200
         assert client.get("/v1/admin/access-requests").status_code == 403
-        assert client.get("/v1/admin/cycles").status_code == 403
         client.post("/v1/auth/logout", headers={"X-CSRF-Token": csrf})
 
         sign_in("owner@example.org")
         console = client.get("/moderation").text
-        assert "Invitation requests" in console and "Weekly cycle" in console
+        assert "Invitation requests" in console and "Weekly cycle" not in console
         assert 'data-admin="true"' in console
+        assert client.get("/v1/admin/cycles").status_code == 404
         assert client.get("/v1/admin/access-requests").status_code == 200

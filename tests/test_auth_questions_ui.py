@@ -6,9 +6,10 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 from sqlalchemy import func, select
 
-from orl_web.models import AuditEvent, BrowserSession, MagicLinkToken, QuestionReport, User
+from orl_web.models import (AuditEvent, BrowserSession, MagicLinkToken, QuestionCluster,
+                            QuestionReport, User)
 
-from conftest import approve, auth, create_cycle, grant_access, submit
+from conftest import approve, auth, grant_access, submit
 
 
 def sign_in(client, mailer, email="reader@example.org"):
@@ -70,46 +71,86 @@ def test_magic_link_rate_limit_has_neutral_response(client, mailer, settings):
     assert len(mailer.deliveries) == settings.magic_link_limit_per_hour
 
 
-@pytest.mark.spec("WEB-Q-002", "WEB-Q-003", "WEB-Q-004")
-def test_paid_researcher_has_private_searchable_question_and_answer_workspace(client):
-    member_page = client.get("/questions", headers=auth("member", "user"))
-    assert member_page.status_code == 200
-    assert "Private research questions</h1>" in member_page.text
-    assert "Your questions, researched carefully." not in member_page.text
-    assert "Request private research" in member_page.text
-    assert "Coming soon" in member_page.text
-    assert "Private questions will be available as a paid research service" in member_page.text
-    assert "Submit private question" not in member_page.text
+@pytest.mark.spec("WEB-Q-001", "WEB-Q-002")
+def test_question_workspace_is_for_the_editorial_team(client):
+    member_page = client.get("/questions", headers=auth("member", "user"), follow_redirects=False)
+    assert member_page.status_code == 303 and member_page.headers["location"] == "/subscriptions"
+    moderator_page = client.get("/questions", headers=auth("mod-1", "moderator"), follow_redirects=False)
+    assert moderator_page.status_code == 303
 
-    paid_page = client.get("/questions", headers=auth("researcher", "paid"))
-    assert paid_page.status_code == 200
-    for copy in ("Submit private question", "Questions and answers", "Search your research"):
-        assert copy in paid_page.text
-    for removed in ("Upvote", "ranked by", "Flag this question", "Send for review"):
-        assert removed not in paid_page.text
+    editor_page = client.get("/questions", headers=auth("owner", "editor"))
+    assert editor_page.status_code == 200
+    for copy in ("Research questions", "Submit a research question", "Approved questions",
+                 "Your submissions"):
+        assert copy in editor_page.text
+    for removed in ("Private research", "paid", "Coming soon", "Upvote", "ranked by"):
+        assert removed not in editor_page.text
+    for label in ("Biology", "Chemistry", "Physics"):
+        assert f">{label}</option>" in editor_page.text
 
-    created = client.post("/v1/questions", json={
-        "text": "How stable is this reported effect across preregistered replications?",
-        "domain": "statistics"
-    }, headers={**auth("researcher", "paid"), "Idempotency-Key": "private-question"})
+    question = {"text": "How stable is this reported effect across preregistered replications?",
+                "domain": "statistics"}
+    for role in ("user", "moderator", "paid"):
+        denied = client.post("/v1/questions", json=question,
+                             headers={**auth("someone", role), "Idempotency-Key": f"denied-{role}"})
+        assert denied.status_code == (401 if role == "paid" else 403)
+    created = client.post("/v1/questions", json=question,
+                          headers={**auth("admin-1", "admin"), "Idempotency-Key": "admin-question"})
     assert created.status_code == 201
-    answered = client.put(f"/v1/admin/submissions/{created.json()['submission_id']}/answer",
-                          json={"answer": "The effect remains uncertain across the available replications."},
-                          headers=auth("owner", "editor"))
-    assert answered.status_code == 200
-    history = client.get("/v1/me/submissions", headers=auth("researcher", "paid")).json()["submissions"]
-    assert history[0]["answer"].startswith("The effect remains uncertain")
-    assert history[0]["answered_at"] is not None
+    history = client.get("/v1/me/submissions", headers=auth("admin-1", "admin")).json()["submissions"]
+    assert history[0]["text"] == question["text"] and history[0]["moderation_state"] == "pending"
+    assert "answer" not in history[0] and "answered_at" not in history[0]
+    assert client.put(f"/v1/admin/submissions/{created.json()['submission_id']}/answer",
+                      json={"answer": "A private answer is no longer part of TruthLM."},
+                      headers=auth("owner", "editor")).status_code in {404, 405}
+
+
+@pytest.mark.spec("WEB-Q-003", "WEB-Q-004", "WEB-SEC-002")
+def test_members_report_questions_and_moderators_resolve_each_once(client, session_factory):
+    cluster_id = approve(client, submit(client).json()["submission_id"]).json()["cluster_id"]
+    report = {"reason": "misleading", "details": "The wording assumes the effect exists."}
+    assert client.post(f"/v1/questions/{cluster_id}/report", json=report).status_code == 401
+    assert client.post("/v1/questions/missing/report", json=report,
+                       headers=auth("member-1")).status_code == 404
+    assert client.post(f"/v1/questions/{cluster_id}/report", json={"reason": "boring"},
+                       headers=auth("member-1")).status_code == 422
+    first = client.post(f"/v1/questions/{cluster_id}/report", json=report, headers=auth("member-1"))
+    assert first.status_code == 201 and first.json()["idempotent_replay"] is False
+    replay = client.post(f"/v1/questions/{cluster_id}/report", json=report, headers=auth("member-1"))
+    assert replay.json() == {**first.json(), "idempotent_replay": True}
+
+    assert client.get("/v1/admin/question-reports", headers=auth("member-1")).status_code == 403
+    listed = client.get("/v1/admin/question-reports", headers=auth("mod-1", "moderator")).json()
+    assert [(item["question"], item["reason"]) for item in listed["reports"]] == [
+        ("Does this treatment improve outcomes across diverse adult populations?", "misleading")]
+    resolve = f"/v1/admin/question-reports/{first.json()['report_id']}/resolve"
+    assert client.post("/v1/admin/question-reports/missing/resolve",
+                       json={"status": "resolved", "reason": "Reworded the question."},
+                       headers=auth("mod-1", "moderator")).status_code == 404
+    resolved = client.post(resolve, json={"status": "resolved", "reason": "Reworded the question."},
+                           headers=auth("mod-1", "moderator"))
+    assert resolved.json()["status"] == "resolved" and resolved.json()["idempotent_replay"] is False
+    again = client.post(resolve, json={"status": "dismissed", "reason": "Changed my mind."},
+                        headers=auth("mod-1", "moderator"))
+    assert again.json()["status"] == "resolved" and again.json()["idempotent_replay"] is True
+    assert client.get("/v1/admin/question-reports", headers=auth("mod-1", "moderator")).json()[
+        "reports"] == []
+    closed = client.get("/v1/admin/question-reports?status=resolved",
+                        headers=auth("mod-1", "moderator")).json()["reports"]
+    assert closed[0]["resolution"] == "Reworded the question." and closed[0]["resolved_at"]
+    with session_factory() as session:
+        assert session.scalar(select(QuestionReport)).status == "resolved"
+        actions = {event.action for event in session.scalars(select(AuditEvent))}
+        assert {"question.reported", "question.report_resolved"} <= actions
 
 
 @pytest.mark.spec("WEB-Q-002", "WEB-UI-001")
-def test_question_queue_is_members_only(client):
+def test_question_list_is_members_only_and_never_public(client):
     page = client.get("/questions", follow_redirects=False)
     assert page.status_code == 303 and page.headers["location"] == "/login?next=/questions"
     assert client.get("/v1/questions").status_code == 401
-    cluster_id = approve(client, submit(client).json()["submission_id"]).json()["cluster_id"]
-    create_cycle(client)
-    client.put(f"/v1/questions/{cluster_id}/vote", headers=auth("voter-1"))
+    approve(client, submit(client).json()["submission_id"])
+    assert client.put("/v1/questions/anything/vote", headers=auth("member-1")).status_code in {404, 405}
     home = client.get("/")
     assert "Does this treatment improve outcomes" not in home.text
     assert 'href="/questions"' not in home.text
@@ -117,7 +158,13 @@ def test_question_queue_is_members_only(client):
 
 
 @pytest.mark.spec("WEB-Q-002", "WEB-Q-006")
-def test_queue_groups_questions_by_domain_and_ranks_by_votes(client):
+def test_question_list_groups_by_domain_oldest_first(client, session_factory):
+    with session_factory() as session:
+        legacy = QuestionCluster(canonical_question="Does an older question keep its place in the list?",
+                                 tags=["legacy"])
+        session.add(legacy)
+        session.commit()
+        legacy_id = legacy.id
     ids = {}
     for key, (text, domain) in {
         "stats-a": ("When do bootstrap intervals undercover for heavy-tailed returns data?", "statistics"),
@@ -126,16 +173,16 @@ def test_queue_groups_questions_by_domain_and_ranks_by_votes(client):
     }.items():
         submission = submit(client, text, subject=f"asker-{key}", key=f"domain-{key}").json()
         ids[key] = approve(client, submission["submission_id"], domain=domain).json()["cluster_id"]
-    create_cycle(client)
-    client.put(f"/v1/questions/{ids['stats-b']}/vote", headers=auth("voter-1"))
-    client.put(f"/v1/questions/{ids['stats-b']}/vote", headers=auth("voter-2"))
-    client.put(f"/v1/questions/{ids['econ-a']}/vote", headers=auth("voter-1"))
-    queue = client.get("/v1/questions", headers=auth("voter-1")).json()
-    assert [item["key"] for item in queue["domains"]] == ["economics", "finance", "mathematics", "statistics"]
-    order = [(item["domain"], item["cluster_id"], item["rank"]) for item in queue["questions"]]
-    assert order == [("economics", ids["econ-a"], 1), ("statistics", ids["stats-b"], 1),
-                     ("statistics", ids["stats-a"], 2)]
-    by_id = {item["cluster_id"]: item for item in queue["questions"]}
-    assert by_id[ids["stats-b"]]["votes"] == 2 and by_id[ids["stats-b"]]["domain_label"] == "Statistics"
-    assert by_id[ids["econ-a"]]["viewer_has_voted"] is True
-    assert by_id[ids["stats-a"]]["viewer_has_voted"] is False
+    listed = client.get("/v1/questions", headers=auth("member-1")).json()
+    assert [item["key"] for item in listed["domains"]] == [
+        "biology", "chemistry", "economics", "finance", "mathematics", "physics", "statistics",
+        "unassigned"]
+    assert listed["domains"][-1] == {"key": "unassigned", "label": "Unassigned"}
+    assert [(item["domain"], item["cluster_id"]) for item in listed["questions"]] == [
+        ("economics", ids["econ-a"]), ("statistics", ids["stats-a"]), ("statistics", ids["stats-b"]),
+        ("unassigned", legacy_id)]
+    item = listed["questions"][0]
+    assert item["domain_label"] == "Economics" and item["status"] == "open"
+    assert item["readiness"] is None
+    assert not {"votes", "rank", "viewer_has_voted"} & set(item)
+    assert "cycle" not in listed

@@ -48,17 +48,6 @@ class ModerationDecision(StrictModel):
         return value
 
 
-class CycleCreate(StrictModel):
-    cycle_key: str = Field(pattern=r"^[0-9]{4}-W[0-9]{2}$")
-    starts_at: datetime
-    ends_at: datetime
-
-
-class FreezeRequest(StrictModel):
-    reason: str = Field(min_length=3, max_length=1000)
-    override_cluster_ids: list[str] = Field(default_factory=list, max_length=50)
-
-
 class ManualReadiness(StrictModel):
     assessment_id: str = Field(min_length=1, max_length=128)
     cluster_id: str
@@ -74,8 +63,12 @@ class EditorialReason(StrictModel):
     reason: str = Field(min_length=3, max_length=2000)
 
 
-class PrivateAnswer(StrictModel):
-    answer: str = Field(min_length=20, max_length=100000)
+class DeliveryRun(StrictModel):
+    limit: int | None = Field(default=None, ge=1, le=1000)
+
+
+class EmailPreference(StrictModel):
+    enabled: bool
 
 
 class MagicLinkRequest(StrictModel):

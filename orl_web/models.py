@@ -24,7 +24,6 @@ class Base(DeclarativeBase):
 
 class Role(str, enum.Enum):
     user = "user"
-    paid = "paid"
     moderator = "moderator"
     editor = "editor"
     admin = "admin"
@@ -45,12 +44,6 @@ class PublicStatus(str, enum.Enum):
     closed = "closed"
 
 
-class CycleState(str, enum.Enum):
-    draft = "draft"
-    open = "open"
-    frozen = "frozen"
-
-
 class AccessStatus(str, enum.Enum):
     pending = "pending"
     approved = "approved"
@@ -64,8 +57,10 @@ class User(Base):
     external_subject: Mapped[str] = mapped_column(String(200), unique=True, nullable=False)
     email: Mapped[str | None] = mapped_column(String(320), unique=True, index=True)
     role: Mapped[Role] = mapped_column(Enum(Role, native_enum=False), nullable=False, default=Role.user)
-    voting_eligible: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    # Research emails cover work first published after the current subscription began.
+    email_subscribed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=utcnow)
+    email_opt_out_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AccessRequest(Base):
@@ -140,8 +135,6 @@ class QuestionSubmission(Base):
     moderation_state: Mapped[ModerationState] = mapped_column(
         Enum(ModerationState, native_enum=False), nullable=False, default=ModerationState.pending)
     moderation_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    answer: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    answered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
     moderated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
@@ -172,47 +165,6 @@ class ClusterMembership(Base):
     decision: Mapped[str] = mapped_column(String(40), nullable=False, default="manual")
     actor_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-
-
-class WeeklyCycle(Base):
-    __tablename__ = "weekly_cycles"
-    __table_args__ = (
-        Index("uq_one_open_cycle", "state", unique=True,
-              postgresql_where=text("state = 'open'"), sqlite_where=text("state = 'open'")),
-    )
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    cycle_key: Mapped[str] = mapped_column(String(16), unique=True, nullable=False)
-    starts_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    ends_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
-    state: Mapped[CycleState] = mapped_column(Enum(CycleState, native_enum=False), nullable=False)
-    vote_snapshot: Mapped[dict | None] = mapped_column(JSON)
-    selection_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
-    frozen_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-
-
-class CycleSelection(Base):
-    """The question selected for research in one domain of a frozen weekly cycle."""
-    __tablename__ = "cycle_selections"
-    __table_args__ = (UniqueConstraint("cycle_id", "domain", name="uq_cycle_selection_domain"),
-                      UniqueConstraint("cycle_id", "cluster_id", name="uq_cycle_selection_cluster"))
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    cycle_id: Mapped[str] = mapped_column(ForeignKey("weekly_cycles.id"), nullable=False, index=True)
-    domain: Mapped[str] = mapped_column(String(64), nullable=False)
-    cluster_id: Mapped[str] = mapped_column(ForeignKey("question_clusters.id"), nullable=False)
-    votes: Mapped[int] = mapped_column(Integer, nullable=False)
-    override: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
-
-
-class Vote(Base):
-    __tablename__ = "votes"
-    __table_args__ = (UniqueConstraint("user_id", "cluster_id", "cycle_id", name="uq_vote_user_cluster_cycle"),)
-    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
-    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
-    cluster_id: Mapped[str] = mapped_column(ForeignKey("question_clusters.id"), nullable=False, index=True)
-    cycle_id: Mapped[str] = mapped_column(ForeignKey("weekly_cycles.id"), nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
 
 
@@ -295,6 +247,20 @@ class ArticleRevision(Base):
     published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     review_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+
+
+class EmailDelivery(Base):
+    """One investigation queued for one subscriber; the unique pair prevents a second email."""
+    __tablename__ = "email_deliveries"
+    __table_args__ = (UniqueConstraint("user_id", "article_id", name="uq_email_delivery_user_article"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=new_id)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    article_id: Mapped[str] = mapped_column(ForeignKey("articles.id"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", index=True)
+    attempts: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_error: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
 class AuditEvent(Base):

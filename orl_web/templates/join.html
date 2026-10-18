@@ -6,20 +6,21 @@
   <div class="section-inner join-layout">
     {% if access_mode == 'invite' %}
     <div>
-      <p class="eyebrow">Whitelist</p>
+      <p class="eyebrow">Waitlist</p>
       <h1 id="join-title">Join the waitlist</h1>
-      <p>TruthLM is invite-only while we onboard users gradually. Once approved, you can subscribe to research topics and choose paid private research when you want a question investigated.</p>
+      <p>We are opening email subscriptions gradually. When your place opens, we will email you, and new investigations will then arrive in your inbox. You can choose the research domains you follow.</p>
       <p class="join-note">Everything we publish is open to read without an account: <a href="/research">the investigations</a> and <a href="/method">the method</a>.</p>
       <p class="join-note">Already invited? <a href="/login">Sign in</a>.</p>
     </div>
     {% include "_join_form.html" %}
     {% else %}
     <div>
-      <p class="eyebrow">Membership</p>
-      <h1 id="join-title">Create your TruthLM account</h1>
-      <p>Sign in with your email address to subscribe to research topics and access private research options.</p>
+      <p class="eyebrow">Subscription</p>
+      <h1 id="join-title">Subscribe to TruthLM</h1>
+      <p>Sign in with your email address to receive new investigations by email and choose the research domains you follow.</p>
+      <p class="join-note">Everything we publish is open to read without an account: <a href="/research">the investigations</a> and <a href="/method">the method</a>.</p>
     </div>
-    <div class="join-open"><a class="button dark" href="/login">Sign in with email</a></div>
+    <div class="join-open"><a class="button dark" href="/login?next=/subscriptions">Sign in with email</a></div>
     {% endif %}
   </div>
 </section>
