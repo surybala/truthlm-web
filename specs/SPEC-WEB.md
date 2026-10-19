@@ -54,7 +54,7 @@
 - **WEB-AUTH-002** Browser sessions shall be revocable, carried in HttpOnly SameSite cookies, and require a session-bound CSRF proof for state-changing requests while preserving signed bearer authentication for service clients.
 - **WEB-SEC-001** Question mutations shall require valid authentication, bounded input, role checks, rate limits, and audit events.
 - **WEB-SEC-002** Moderator, editor, administrator, and service operations shall be separated by signed role claims, and sensitive mutations shall emit immutable audit events.
-- **WEB-OPS-001** The PostgreSQL-oriented schema shall be reproducibly installable through a versioned migration with database and application protections for immutable records.
+- **WEB-OPS-001** The PostgreSQL-oriented schema shall be reproducibly installable through a versioned migration with database and application protections for immutable records. Migrations shall connect to `ORL_WEB_DATABASE_URL` exactly as configured, including percent-encoded credentials.
 - **WEB-OPS-002** The service and its migrations shall load local configuration from the project's `.env` file without overriding variables already set in the environment, and the test suite shall neither read that file nor inherit `ORL_WEB_*` variables from the developer's shell.
 
 ## Access model

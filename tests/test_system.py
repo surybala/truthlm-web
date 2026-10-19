@@ -70,6 +70,20 @@ def test_initial_migration_upgrades_and_downgrades(tmp_path):
 
 
 @pytest.mark.spec("WEB-OPS-001")
+def test_migrations_accept_percent_encoded_database_url(tmp_path, monkeypatch):
+    # Hosted Postgres passwords are percent-encoded in the URL (@ -> %40); alembic's ConfigParser
+    # treats a bare "%" as interpolation, so env.py must pass the URL through unchanged.
+    (tmp_path / "a@b").mkdir()
+    monkeypatch.setenv("ORL_WEB_DATABASE_URL", f"sqlite:///{tmp_path}/a%40b/encoded.db")
+    cfg = Config(str(ROOT / "alembic.ini"))
+    cfg.set_main_option("script_location", str(ROOT / "migrations"))
+    command.upgrade(cfg, "head")
+    engine = __import__("sqlalchemy").create_engine(f"sqlite:///{tmp_path}/a@b/encoded.db")
+    assert {"users", "articles", "email_deliveries"} <= set(inspect(engine).get_table_names())
+    engine.dispose()
+
+
+@pytest.mark.spec("WEB-OPS-001")
 def test_immutable_models_reject_application_updates(session_factory):
     with session_factory() as session:
         user = User(external_subject="actor", role="admin")

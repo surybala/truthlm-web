@@ -14,8 +14,9 @@ load_env_file()
 config = context.config
 if config.config_file_name:
     fileConfig(config.config_file_name)
+# ConfigParser interpolates "%"; escape it so percent-encoded passwords reach the engine intact.
 config.set_main_option("sqlalchemy.url", os.environ.get(
-    "ORL_WEB_DATABASE_URL", config.get_main_option("sqlalchemy.url")))
+    "ORL_WEB_DATABASE_URL", config.get_main_option("sqlalchemy.url")).replace("%", "%%"))
 target_metadata = Base.metadata
 
 
