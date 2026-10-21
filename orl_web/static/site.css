@@ -40,7 +40,7 @@ h1, h2, h3 { line-height: 1.08; letter-spacing: 0; }
 .header-account > a:not(.header-action), .header-account button { border: 0; background: transparent; color: var(--muted); font-size: 13px; font-weight: 700; cursor: pointer; }
 .header-account > a:not(.header-action):hover, .header-account button:hover { color: var(--ink); }
 
-.hero { min-height: min(720px, calc(100svh - 108px)); display: flex; align-items: center; color: #fff; background-color: rgba(5, 9, 11, .64); background-image: url('/static/images/truthlm-research-workspace-v2.png'); background-size: cover; background-position: center; background-blend-mode: multiply; }
+.hero { min-height: min(720px, calc(100svh - 108px)); display: flex; align-items: center; color: #fff; background-color: rgba(5, 9, 11, .64); background-image: url('/static/images/truthlm-research-workspace.jpg?v=20261020'); background-size: cover; background-position: center; background-blend-mode: multiply; }
 .hero-inner { width: min(var(--max), calc(100% - 48px)); margin: 0 auto; padding: 72px 0 80px; }
 .hero h1 { margin-bottom: 18px; max-width: 760px; font-family: Georgia, "Times New Roman", serif; font-size: 78px; font-weight: 500; }
 .hero-lede { max-width: 720px; font-size: 23px; line-height: 1.45; }

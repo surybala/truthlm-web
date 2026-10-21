@@ -12,12 +12,12 @@
   <meta property="og:title" content="TruthLM — Questions before answers">
   <meta property="og:description" content="{{ default_description }}">
   <meta property="og:url" content="{{ base_url }}{{ request.url.path }}">
-  <meta property="og:image" content="{{ base_url }}/static/images/truthlm-research-workspace-v2.png">
+  <meta property="og:image" content="{{ base_url }}/static/images/truthlm-research-workspace.jpg?v=20261020">
   <meta name="twitter:card" content="summary_large_image">
   {% endblock %}
   <link rel="icon" href="{{ url_for('static', path='images/favicon.svg') }}" type="image/svg+xml">
   <link rel="alternate" type="application/rss+xml" title="TruthLM Research" href="/feeds/research.xml">
-  <link rel="stylesheet" href="{{ url_for('static', path='site.css') }}?v=20261004">
+  <link rel="stylesheet" href="{{ url_for('static', path='site.css') }}?v=20261020">
   <script defer src="{{ url_for('static', path='site.js') }}?v=20260927"></script>
 </head>
 <body class="{% block body_class %}{% endblock %}">

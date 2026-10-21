@@ -127,6 +127,32 @@ def test_suite_does_not_inherit_web_configuration():
     assert not [name for name in os.environ if name.startswith("ORL_WEB_") and name != "ORL_WEB_DOTENV"]
 
 
+@pytest.mark.spec("WEB-OPS-003")
+def test_static_assets_carry_explicit_cache_headers(client):
+    year, short = "public, max-age=31536000, immutable", "public, max-age=300"
+    assert client.get("/static/site.css?v=20261020").headers["cache-control"] == year
+    assert client.get("/static/site.css?v=").headers["cache-control"] == short
+    plain = client.get("/static/auth.js")
+    assert plain.status_code == 200 and plain.headers["cache-control"] == short
+    revalidated = client.get("/static/auth.js", headers={"If-None-Match": plain.headers["etag"]})
+    assert revalidated.status_code == 304 and revalidated.headers["cache-control"] == short
+    missing = client.get("/static/missing.js?v=1")
+    assert missing.status_code == 404 and "immutable" not in missing.headers.get("cache-control", "")
+
+
+@pytest.mark.spec("WEB-OPS-003")
+def test_referenced_raster_images_exist_and_stay_small():
+    static = ROOT / "orl_web" / "static"
+    sources = [*(ROOT / "orl_web" / "templates").glob("*.html"), static / "site.css"]
+    image = r"images/[\w./-]+\.(?:png|jpe?g|webp|gif|avif)"
+    refs = {ref for source in sources for ref in re.findall(
+        rf"/static/({image})|path=['\"]({image})['\"]", source.read_text()) for ref in ref if ref}
+    assert refs, "found no raster image references; the pattern no longer matches the templates"
+    for ref in sorted(refs):
+        assert (static / ref).is_file(), f"{ref} is referenced but missing"
+        assert (static / ref).stat().st_size <= 400_000, f"{ref} is {(static / ref).stat().st_size} bytes"
+
+
 def test_spec_traceability():
     ids = REQ.findall((ROOT / "specs" / "SPEC-WEB.md").read_text())
     cited = set()

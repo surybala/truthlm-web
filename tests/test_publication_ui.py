@@ -42,9 +42,9 @@ def test_public_home_and_method_explain_transparent_research(client):
     assert 'href="/login">Sign in' in home.text and 'href="/questions"' not in home.text
     assert "frame-ancestors 'none'" in home.headers["content-security-policy"]
     assert home.headers["x-content-type-options"] == "nosniff"
-    hero = client.get("/static/images/truthlm-research-workspace-v2.png")
+    hero = client.get("/static/images/truthlm-research-workspace.jpg?v=20261020")
     assert hero.status_code == 200
-    assert hero.headers["content-type"] == "image/png"
+    assert hero.headers["content-type"] == "image/jpeg"
     assert "We would rather publish nothing" in home.text
     archive = client.get("/research")
     assert 'class="feed-link" href="/join"' in archive.text

@@ -57,6 +57,7 @@
 - **WEB-SEC-002** Moderator, editor, administrator, and service operations shall be separated by signed role claims, and sensitive mutations shall emit immutable audit events.
 - **WEB-OPS-001** The PostgreSQL-oriented schema shall be reproducibly installable through a versioned migration with database and application protections for immutable records. Migrations shall connect to `ORL_WEB_DATABASE_URL` exactly as configured, including percent-encoded credentials.
 - **WEB-OPS-002** The service and its migrations shall load local configuration from the project's `.env` file without overriding variables already set in the environment, and the test suite shall neither read that file nor inherit `ORL_WEB_*` variables from the developer's shell.
+- **WEB-OPS-003** Static assets shall carry explicit `Cache-Control`: a version-stamped request (non-empty `?v=`) is public and immutable for one year, and any other static response is public for at most five minutes, so browsers and a CDN absorb repeat traffic without pinning stale unversioned scripts. Every raster image referenced by a template or the stylesheet shall exist and weigh at most 400 KB, keeping per-visit egress small.
 
 ## Access model
 

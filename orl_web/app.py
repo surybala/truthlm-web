@@ -10,7 +10,7 @@ from email.utils import format_datetime
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote, urlsplit
+from urllib.parse import parse_qs, quote, urlsplit
 from xml.etree import ElementTree as ET
 
 from fastapi import Body, Depends, FastAPI, Header, HTTPException, Query, Request, Response
@@ -39,6 +39,18 @@ from .schemas import (AccessDecision, AccessInvite, AccessRequestCreate, Deliver
                       EditorialReason, EmailPreference, ManualReadiness, ModerationDecision,
                       MagicLinkRequest, QuestionCreate, QuestionReportCreate,
                       QuestionReportResolution, ResearchSubscriptionCreate)
+
+
+class CachedStaticFiles(StaticFiles):
+    """WEB-OPS-003: explicit caching so browsers and a CDN absorb repeat traffic. A version-stamped
+    URL (?v=...) never changes content; anything else may change on the next deploy."""
+
+    async def get_response(self, path: str, scope) -> Response:
+        response = await super().get_response(path, scope)
+        versioned = any(parse_qs(scope.get("query_string", b"").decode("latin-1")).get("v", []))
+        response.headers["Cache-Control"] = ("public, max-age=31536000, immutable" if versioned
+                                             else "public, max-age=300")
+        return response
 
 
 def normalize_question(value: str) -> str:
@@ -250,7 +262,7 @@ def create_app(*, settings: Settings | None = None, session_factory=None,
 
     app = FastAPI(title="TruthLM API", version="0.1.0",
                   description="Public research publishing and email subscription service for ORL")
-    app.mount("/static", StaticFiles(directory=_PACKAGE / "static"), name="static")
+    app.mount("/static", CachedStaticFiles(directory=_PACKAGE / "static"), name="static")
     templates = Jinja2Templates(directory=_PACKAGE / "templates")
     templates.env.globals.update(base_url=settings.base_url, access_mode=settings.access_mode,
                                  domain_labels=settings.domain_labels)
