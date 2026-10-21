@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import ssl
 
 import pytest
 
@@ -43,7 +44,7 @@ def test_smtp_mailer_uses_tls_and_credentials(monkeypatch):
         def __exit__(self, *args):
             return None
 
-        def starttls(self):
+        def starttls(self, context=None):
             calls.append(("starttls",))
 
         def login(self, username, password):
@@ -86,7 +87,7 @@ def test_smtp_research_email_has_text_html_and_one_click_unsubscribe(monkeypatch
         def __exit__(self, *args):
             return None
 
-        def starttls(self):
+        def starttls(self, context=None):
             pass
 
         def send_message(self, message):
@@ -104,6 +105,40 @@ def test_smtp_research_email_has_text_html_and_one_click_unsubscribe(monkeypatch
     assert message["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
     assert message.get_body(("plain",)).get_content().strip() == "Plain body"
     assert message.get_body(("html",)).get_content().strip() == "<p>HTML body</p>"
+
+
+@pytest.mark.spec("WEB-MAIL-005")
+def test_smtp_starttls_verifies_certificate_before_credentials(monkeypatch):
+    calls = []
+
+    class FakeSMTP:
+        def __init__(self, host, port, timeout):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def starttls(self, context=None):
+            calls.append(("starttls", context))
+
+        def login(self, username, password):
+            calls.append(("login",))
+
+        def send_message(self, message):
+            calls.append(("send",))
+
+    monkeypatch.setattr("orl_web.email.smtplib.SMTP", FakeSMTP)
+    settings = Settings(email_delivery="smtp", smtp_host="smtp.example.org",
+                        smtp_username="user", smtp_password="pass",
+                        smtp_from_email="mail@example.org")
+    SMTPMailer(settings).send("person@example.org", "https://truthlm.com/auth/verify?token=abc")
+    assert [call[0] for call in calls] == ["starttls", "login", "send"]
+    context = calls[0][1]
+    assert isinstance(context, ssl.SSLContext)
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
 
 
 def test_production_auth_configuration_is_strict():

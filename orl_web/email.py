@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import smtplib
+import ssl
 from email.message import EmailMessage
 from typing import Protocol
 
@@ -69,7 +70,8 @@ class SMTPMailer:
             message.add_alternative(html, subtype="html")
         with smtplib.SMTP(self.settings.smtp_host, self.settings.smtp_port, timeout=15) as client:
             if self.settings.smtp_starttls:
-                client.starttls()
+                # smtplib's default context skips certificate verification.
+                client.starttls(context=ssl.create_default_context())
             if self.settings.smtp_username:
                 client.login(self.settings.smtp_username, self.settings.smtp_password)
             client.send_message(message)
